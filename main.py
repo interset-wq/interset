@@ -1,28 +1,27 @@
 from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
 
-# 创建app实例
-app = FastAPI(title="最简FastAPI Demo")
+app = FastAPI()
 
-# 根路径GET接口
-@app.get("/")
-def root():
-    return {"msg": "hello fastapi", "code": 200}
+# 页面路由：仅h1 Hello World，纯HTML无CSS
+@app.get("/", response_class=HTMLResponse)
+async def index():
+    return """
+    <html>
+        <body>
+            <h1>Hello World</h1>
+        </body>
+    </html>
+    """
 
-# 带路径参数接口
-@app.get("/hello/{name}")
-def say_hello(name: str):
-    return {"message": f"你好，{name}"}
+# API接口，返回JSON
+@app.get("/info")
+async def api_info():
+    return {"msg": "this is api response", "code": 200}
 
-# post请求示例，接收json
-from pydantic import BaseModel
-
-class User(BaseModel):
-    username: str
-    age: int
-
-@app.post("/user")
-def create_user(user: User):
-    return {"username": user.username, "age": user.age, "status": "created"}
+@app.post("/data")
+async def api_data(name: str):
+    return {"receive_name": name, "status": "ok"}
 
 if __name__ == "__main__":
     import uvicorn
