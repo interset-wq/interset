@@ -7,6 +7,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      # 前端构建：dist/ 被 .gitignore 忽略（不入库），须在部署前生成
+      # 参考 https://fastapicloud.com/docs/builds-and-deployments/frontend/
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Build the frontend
+        run: |
+          cd frontend
+          pnpm install --frozen-lockfile
+          pnpm build
+
       - uses: astral-sh/setup-uv@v7
       - run: uv run fastapi deploy
         env:
