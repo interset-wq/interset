@@ -41,7 +41,7 @@ def sql_logs(
 
 @app.get("/api/tables", tags=["schema"])
 def tables() -> list[dict]:
-    """列出所有表的表结构（类似 psql \\d：表名、字段名、数据类型、可空、主键）。"""
+    """列出所有表的表结构（类似 psql \\d：表名、字段名、数据类型、可空、默认值、主键）。"""
     inspector = inspect(engine)
     rows: list[dict] = []
     for table_name in inspector.get_table_names():
@@ -54,6 +54,7 @@ def tables() -> list[dict]:
                     "column": col["name"],
                     "type": str(col["type"]),
                     "nullable": col["nullable"],
+                    "default": col.get("default"),
                     "primary_key": col["name"] in pk_columns,
                 }
             )
