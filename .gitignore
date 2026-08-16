@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- 项目自定义忽略 ---
+
+# SQLite 数据库（运行时自动生成，不应入库）
+database.db
+
+# 前端依赖（由 pnpm 安装）
+node_modules/
+
+# 临时文件目录（约定：项目临时文件放 <project_name>/temp/）
+temp/
+
+# AtomCode 运行时状态目录（.atomcode.md 指令文件需入库，此目录为自动生成状态）
+.atomcode/
+
+# 代理技能目录（如 .agents/skills，工具配置不入库）
+.agents/
