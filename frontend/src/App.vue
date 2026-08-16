@@ -1,286 +1,51 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+// 根组件：组装左侧表列表、数据网格、schema 视图、SQL 日志等子组件
+import { FK_COLUMNS, TABLE_NAMES, useTableData } from "./composables/useTableData.js";
+import DataGrid from "./components/DataGrid.vue";
+import InsertRowForm from "./components/InsertRowForm.vue";
+import PaginationBar from "./components/PaginationBar.vue";
+import SchemaView from "./components/SchemaView.vue";
+import SqlLogPanel from "./components/SqlLogPanel.vue";
+import TableSidebar from "./components/TableSidebar.vue";
 
-// ---- 页面状态 ----
-const health = ref(null);
-const error = ref("");
-const loading = ref(false);
-const sqlLogs = ref([]);
+const {
+  health,
+  error,
+  loading,
+  sqlLogs,
+  activeTable,
+  rows,
+  fkOptions,
+  editingCell,
+  insertMode,
+  insertForm,
+  page,
+  pageSize,
+  total,
+  totalPages,
+  tableGroups,
+  currentColumns,
+  loadTable,
+  goToPage,
+  startEdit,
+  cancelEdit,
+  saveCell,
+  deleteRow,
+  startInsert,
+  cancelInsert,
+  saveInsert,
+} = useTableData();
 
-// 左侧表列表（Neon/Supabase 风格 sidebar）
-const tableNames = ["hero", "team", "mission", "mission_hero"];
-const activeTable = ref(null); // 当前选中的表名
-const schema = ref({}); // 表名 -> 列定义 [{column,type,nullable,default,primary_key}]
-const rows = ref([]); // 当前表的数据行
-const fkOptions = ref({}); // 外键选项：列名 -> [{id, label}]
-const loadedTables = ref({}); // 记录已加载的表（避免重复请求 schema）
-
-// 编辑 / 插入状态
-const editingCell = ref(null); // {rowIdx, column}
-const editValue = ref("");
-const insertMode = ref(false);
-const insertForm = ref({});
-
-// ---- 请求封装 ----
-async function api(path, options = {}) {
-  const res = await fetch(`/api${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `Request failed: ${res.status}`);
-  }
-  if (res.status === 204) return null;
-  return res.json();
+// 当前表的外键列名（传给网格/表单用于渲染下拉选择）
+function currentFkColumns() {
+  return FK_COLUMNS[activeTable.value] || [];
 }
 
-// ---- SQL 日志 ----
-async function loadSqlLogs() {
-  sqlLogs.value = await api("/sql-logs?limit=5");
+// 分页控件修改每页条数后重新加载当前页
+function changePageSize(size) {
+  pageSize.value = size;
+  loadTable(activeTable.value, false);
 }
-
-// ---- 表结构（schema）----
-async function loadSchemaOnce() {
-  if (loadedTables.value.schema) return;
-  const cols = await api("/tables");
-  const map = {};
-  for (const c of cols) {
-    if (!map[c.table]) map[c.table] = [];
-    map[c.table].push(c);
-  }
-  schema.value = map;
-  loadedTables.value.schema = true;
-}
-
-// 当前表的列定义（用于表头渲染）
-function currentColumns() {
-  return schema.value[activeTable.value] || [];
-}
-
-// 主键列名集合
-function pkSet(table) {
-  return new Set(
-    (schema.value[table] || []).filter((c) => c.primary_key).map((c) => c.column)
-  );
-}
-
-// schema 视图：按表分组的表结构（psql \d 风格，每张表一个表格）
-const tableGroups = computed(() =>
-  Object.entries(schema.value).map(([table, columns]) => ({ table, columns }))
-);
-
-// 某张表的主键列（Indexes 行展示）
-function pkColumns(group) {
-  const pks = group.columns.filter((c) => c.primary_key).map((c) => c.column);
-  return pks.length ? pks.join(", ") : "(none)";
-}
-
-// 外键列：hero.team_id / mission_hero.mission_id / mission_hero.hero_id
-const FK_COLUMNS = {
-  hero: ["team_id"],
-  mission: [],
-  mission_hero: ["mission_id", "hero_id"],
-  team: [],
-};
-
-// 分页状态（hero 表使用后端分页，默认每页 5 条）
-const page = ref(1);
-const pageSize = ref(5);
-const total = ref(0);
-
-// 总页数
-const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
-
-// ---- 加载指定表的数据 ----
-async function loadTable(name, resetPage = true) {
-  error.value = "";
-  activeTable.value = name;
-  if (resetPage) page.value = 1;
-  loading.value = true;
-  try {
-    await loadSchemaOnce();
-    // schema 视图：只显示表结构，不加载数据行
-    if (name === "schema") {
-      rows.value = [];
-      fkOptions.value = {};
-      return;
-    }
-    // 主数据（hero 走后端分页，其余表数据量小直接全量）
-    if (name === "hero") {
-      const data = await api(
-        `/heroes?offset=${(page.value - 1) * pageSize.value}&limit=${pageSize.value}`
-      );
-      // 兼容新旧后端：{items,total} 或纯数组，避免 rows 为 undefined 导致模板崩溃
-      rows.value = Array.isArray(data) ? data : data?.items ?? [];
-      total.value = Array.isArray(data) ? data.length : data?.total ?? 0;
-    } else if (name === "team") rows.value = await api("/teams");
-    else if (name === "mission") rows.value = await api("/missions");
-    else if (name === "mission_hero") rows.value = await api("/missions/links");
-    // 外键选项（并行加载关联表）
-    const fks = FK_COLUMNS[name] || [];
-    const tasks = [];
-    if (fks.includes("team_id")) tasks.push(api("/teams").then((d) => (fkOptions.value.team_id = (d ?? []).map((t) => ({ id: t.id, label: t.name })))));
-    if (fks.includes("mission_id")) tasks.push(api("/missions").then((d) => (fkOptions.value.mission_id = (d ?? []).map((m) => ({ id: m.id, label: m.name })))));
-    if (fks.includes("hero_id")) tasks.push(api("/heroes?limit=100").then((d) => (fkOptions.value.hero_id = (Array.isArray(d) ? d : d?.items ?? []).map((h) => ({ id: h.id, label: h.name })))));
-    await Promise.all(tasks);
-    await loadSqlLogs();
-  } catch (e) {
-    error.value = e.message;
-  } finally {
-    loading.value = false;
-  }
-}
-
-// 翻页（保留当前表与页码，不重置）
-async function goToPage(p) {
-  if (p < 1 || p > totalPages.value) return;
-  page.value = p;
-  await loadTable(activeTable.value, false);
-}
-
-// ---- 单元格展示值 ----
-function cellText(row, column) {
-  const v = row[column];
-  if (v === null || v === undefined) return "NULL";
-  // 外键列显示 label
-  const opts = fkOptions.value[column];
-  if (opts && FK_COLUMNS[activeTable.value]?.includes(column)) {
-    const hit = opts.find((o) => o.id === v);
-    if (hit) return `${hit.label} (${v})`;
-  }
-  return String(v);
-}
-
-// ---- 单元格编辑 ----
-function startEdit(row, rowIdx, column) {
-  if (pkSet(activeTable.value).has(column)) return; // 主键不可编辑
-  editingCell.value = { rowIdx, column };
-  editValue.value = row[column] ?? "";
-}
-
-function cancelEdit() {
-  editingCell.value = null;
-}
-
-function isEditing(rowIdx, column) {
-  return editingCell.value && editingCell.value.rowIdx === rowIdx && editingCell.value.column === column;
-}
-
-// 保存单元格（PATCH）
-async function saveCell(row, rowIdx) {
-  const { column } = editingCell.value;
-  const table = activeTable.value;
-  let value = editValue.value;
-  const colDef = currentColumns().find((c) => c.column === column);
-  if (colDef && colDef.type.toUpperCase().includes("INT")) {
-    value = value === "" || value === "NULL" ? null : Number(value);
-  } else if (value === "NULL" || value === "") {
-    value = null;
-  }
-  try {
-    if (table === "hero") {
-      await api(`/heroes/${row.id}`, { method: "PATCH", body: JSON.stringify({ [column]: value }) });
-    } else if (table === "team") {
-      await api(`/teams/${row.id}`, { method: "PATCH", body: JSON.stringify({ [column]: value }) });
-    } else if (table === "mission") {
-      await api(`/missions/${row.id}`, { method: "PATCH", body: JSON.stringify({ [column]: value }) });
-    } else if (table === "mission_hero") {
-      await api(`/missions/links/${row.mission_id}/${row.hero_id}`, { method: "PATCH", body: JSON.stringify({ [column]: value }) });
-    }
-    cancelEdit();
-    await loadTable(table);
-  } catch (e) {
-    error.value = e.message;
-  }
-}
-
-// ---- 删除行 ----
-async function deleteRow(row) {
-  error.value = "";
-  const table = activeTable.value;
-  if (!confirm(`Delete this row from ${table}?`)) return;
-  try {
-    if (table === "hero") await api(`/heroes/${row.id}`, { method: "DELETE" });
-    else if (table === "team") await api(`/teams/${row.id}`, { method: "DELETE" });
-    else if (table === "mission") await api(`/missions/${row.id}`, { method: "DELETE" });
-    else if (table === "mission_hero") await api(`/missions/links/${row.mission_id}/${row.hero_id}`, { method: "DELETE" });
-    await loadTable(table);
-  } catch (e) {
-    error.value = e.message;
-  }
-}
-
-// ---- 插入行 ----
-function startInsert() {
-  insertMode.value = true;
-  const f = {};
-  for (const c of currentColumns()) {
-    if (c.primary_key) continue; // 自增主键不填
-    f[c.column] = "";
-  }
-  insertForm.value = f;
-}
-
-function cancelInsert() {
-  insertMode.value = false;
-}
-
-// 插入行字段是否为外键
-function isFkColumn(column) {
-  return (FK_COLUMNS[activeTable.value] || []).includes(column);
-}
-
-function fkOptionsOf(column) {
-  return fkOptions.value[column] || [];
-}
-
-async function saveInsert() {
-  error.value = "";
-  const table = activeTable.value;
-  const body = {};
-  for (const [col, val] of Object.entries(insertForm.value)) {
-    const colDef = currentColumns().find((c) => c.column === col);
-    if (val === "" || val === "NULL") {
-      body[col] = null;
-    } else if (colDef && colDef.type.toUpperCase().includes("INT")) {
-      body[col] = Number(val);
-    } else {
-      body[col] = val;
-    }
-  }
-  loading.value = true;
-  try {
-    if (table === "hero") await api("/heroes", { method: "POST", body: JSON.stringify(body) });
-    else if (table === "team") await api("/teams", { method: "POST", body: JSON.stringify(body) });
-    else if (table === "mission") await api("/missions", { method: "POST", body: JSON.stringify(body) });
-    else if (table === "mission_hero") {
-      await api("/missions/links", {
-        method: "POST",
-        body: JSON.stringify({
-          mission_id: Number(insertForm.value.mission_id),
-          hero_id: Number(insertForm.value.hero_id),
-          role: insertForm.value.role || null,
-        }),
-      });
-    }
-    insertMode.value = false;
-    await loadTable(table);
-  } catch (e) {
-    error.value = e.message;
-  } finally {
-    loading.value = false;
-  }
-}
-
-// ---- 初始：只检查后端健康状态，不查询任何表 ----
-onMounted(async () => {
-  try {
-    health.value = await api("/health");
-  } catch (e) {
-    error.value = e.message;
-  }
-});
 </script>
 
 <template>
@@ -295,65 +60,18 @@ onMounted(async () => {
 
     <p v-if="error" class="err">{{ error }}</p>
 
-    <!-- 布局：左侧表列表 + 右侧数据网格 -->
+    <!-- 布局：左侧表列表 + 右侧数据网格 / schema 视图 -->
     <div class="editor-layout">
-      <!-- 左侧 sidebar：表列表 + schema 视图入口 -->
-      <aside class="sidebar">
-        <div class="sidebar-title">Tables</div>
-        <button
-          v-for="t in tableNames"
-          :key="t"
-          class="table-item"
-          :class="{ active: activeTable === t }"
-          @click="loadTable(t)"
-        >
-          {{ t }}
-        </button>
-        <div class="sidebar-sep"></div>
-        <div class="sidebar-title">Views</div>
-        <button
-          class="table-item"
-          :class="{ active: activeTable === 'schema' }"
-          @click="loadTable('schema')"
-        >
-          schema
-        </button>
-      </aside>
+      <TableSidebar
+        :table-names="TABLE_NAMES"
+        :active-table="activeTable"
+        @select="loadTable"
+      />
 
-      <!-- 右侧：schema 视图 / 数据网格 -->
       <section class="grid-panel">
-        <!-- schema 视图：仅显示表结构（psql \d 风格），不加载数据行 -->
+        <!-- schema 视图 -->
         <template v-if="activeTable === 'schema'">
-          <div class="grid-toolbar">
-            <span class="table-name">schema</span>
-            <span class="col-count">{{ tableGroups.length }} tables</span>
-            <button class="secondary" @click="loadTable('schema')">Refresh</button>
-          </div>
-          <div v-for="group in tableGroups" :key="group.table" class="schema-table">
-            <h3 class="query-sql">Table "{{ group.table }}"</h3>
-            <div class="table-wrap">
-              <table class="cli-table">
-                <thead>
-                  <tr>
-                    <th>Column</th>
-                    <th>Type</th>
-                    <th>Nullable</th>
-                    <th>Default</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="col in group.columns" :key="col.column">
-                    <td>{{ col.column }}</td>
-                    <td>{{ col.type }}</td>
-                    <td>{{ col.nullable ? "" : "not null" }}</td>
-                    <td>{{ col.default ?? "" }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p class="indexes">Indexes: PRIMARY KEY ({{ pkColumns(group) }})</p>
-          </div>
-          <p v-if="!tableGroups.length" class="muted">0 tables</p>
+          <SchemaView :table-groups="tableGroups" @refresh="loadTable('schema')" />
         </template>
 
         <!-- 数据表视图 -->
@@ -361,117 +79,44 @@ onMounted(async () => {
           <div class="grid-toolbar">
             <span class="table-name">{{ activeTable }}</span>
             <span class="col-count">{{ currentColumns().length }} columns</span>
-            <button v-if="!insertMode" class="primary" @click="startInsert">Insert row</button>
+            <button v-if="!insertMode" class="primary" @click="startInsert">
+              Insert row
+            </button>
             <button class="secondary" @click="loadTable(activeTable)">Refresh</button>
           </div>
 
-          <!-- 插入行表单 -->
-          <form v-if="insertMode" class="insert-form" @submit.prevent="saveInsert">
-            <label v-for="c in currentColumns()" :key="c.column" class="insert-field">
-              <span>{{ c.column }}</span>
-              <select v-if="isFkColumn(c.column)" v-model="insertForm[c.column]">
-                <option value="">— NULL —</option>
-                <option v-for="o in fkOptionsOf(c.column)" :key="o.id" :value="o.id">
-                  {{ o.label }}
-                </option>
-              </select>
-              <input
-                v-else
-                v-model="insertForm[c.column]"
-                :type="c.type.toUpperCase().includes('INT') ? 'number' : 'text'"
-                :placeholder="c.nullable ? 'NULL' : 'required'"
-              />
-            </label>
-            <div class="insert-actions">
-              <button type="submit" :disabled="loading">Save</button>
-              <button type="button" class="secondary" @click="cancelInsert">Cancel</button>
-            </div>
-          </form>
+          <InsertRowForm
+            v-if="insertMode"
+            :columns="currentColumns()"
+            :fk-columns="currentFkColumns()"
+            :fk-options="fkOptions"
+            :loading="loading"
+            :insert-form="insertForm"
+            @save="saveInsert"
+            @cancel="cancelInsert"
+          />
 
-          <!-- 数据网格 -->
-          <div class="table-wrap">
-            <table class="grid-table">
-              <thead>
-                <tr>
-                  <th v-for="c in currentColumns()" :key="c.column" class="col-header">
-                    {{ c.column }}
-                  </th>
-                  <th class="col-actions"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, i) in rows" :key="i">
-                  <td
-                    v-for="c in currentColumns()"
-                    :key="c.column"
-                    class="cell"
-                    :class="{ editable: !pkSet(activeTable).has(c.column) }"
-                    @click="!pkSet(activeTable).has(c.column) && startEdit(row, i, c.column)"
-                  >
-                    <template v-if="isEditing(i, c.column)">
-                      <select
-                        v-if="isFkColumn(c.column)"
-                        v-model="editValue"
-                        class="cell-input"
-                        autofocus
-                        @change="saveCell(row, i)"
-                        @blur="saveCell(row, i)"
-                      >
-                        <option :value="null">NULL</option>
-                        <option v-for="o in fkOptionsOf(c.column)" :key="o.id" :value="o.id">
-                          {{ o.label }}
-                        </option>
-                      </select>
-                      <input
-                        v-else
-                        v-model="editValue"
-                        class="cell-input"
-                        autofocus
-                        @keydown.enter="saveCell(row, i)"
-                        @keydown.esc="cancelEdit"
-                        @blur="saveCell(row, i)"
-                      />
-                    </template>
-                    <template v-else>{{ cellText(row, c.column) }}</template>
-                  </td>
-                  <td class="cell-actions">
-                    <button class="danger small" @click="deleteRow(row)">🗑</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <DataGrid
+            :columns="currentColumns()"
+            :rows="rows"
+            :fk-columns="currentFkColumns()"
+            :fk-options="fkOptions"
+            :editing-cell="editingCell"
+            @start-edit="startEdit"
+            @save-cell="saveCell"
+            @cancel-edit="cancelEdit"
+            @delete-row="deleteRow"
+          />
 
-          <!-- 分页控件（hero 表使用后端分页） -->
-          <div v-if="activeTable === 'hero'" class="pagination">
-            <button
-              class="secondary small"
-              :disabled="page <= 1"
-              @click="goToPage(page - 1)"
-            >
-              ← Prev
-            </button>
-            <span class="page-info">
-              Page {{ page }} / {{ totalPages }}（{{ total }} rows）
-            </span>
-            <button
-              class="secondary small"
-              :disabled="page >= totalPages"
-              @click="goToPage(page + 1)"
-            >
-              Next →
-            </button>
-            <select
-              v-model.number="pageSize"
-              class="page-size"
-              @change="loadTable(activeTable, false)"
-            >
-              <option :value="5">5 / page</option>
-              <option :value="10">10 / page</option>
-              <option :value="20">20 / page</option>
-              <option :value="50">50 / page</option>
-            </select>
-          </div>
+          <PaginationBar
+            v-if="activeTable === 'hero'"
+            :page="page"
+            :total-pages="totalPages"
+            :total="total"
+            :page-size="pageSize"
+            @go-page="goToPage"
+            @change-page-size="changePageSize"
+          />
 
           <p v-if="!rows.length" class="muted">0 rows</p>
         </template>
@@ -483,31 +128,7 @@ onMounted(async () => {
     </div>
 
     <!-- SQL 日志：content 区域下方独立 section -->
-    <section class="card">
-      <h2>SQL Log (recent {{ sqlLogs.length }}, newest first)</h2>
-      <p class="muted">
-        Actual SQL statements executed by SQLModel for each operation
-        (query / insert / delete), parameters inlined.
-      </p>
-
-      <div class="table-wrap">
-        <table class="cli-table">
-          <thead>
-            <tr>
-              <th>time</th>
-              <th>sql</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(log, i) in sqlLogs" :key="i">
-              <td class="log-time">{{ log.time }}</td>
-              <td><code>{{ log.sql }}</code></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-if="!sqlLogs.length" class="muted">0 rows — no SQL logs yet</p>
-    </section>
+    <SqlLogPanel :sql-logs="sqlLogs" />
   </main>
 </template>
 
