@@ -1,13 +1,12 @@
 <script setup>
-// 分页控件（hero 表使用后端分页）
+// 分页控件：仅显示上一页/下一页与页码信息（每页条数固定为 5，不允许调整）
 defineProps({
   page: { type: Number, required: true },
   totalPages: { type: Number, required: true },
   total: { type: Number, required: true },
-  pageSize: { type: Number, required: true },
 });
 
-const emit = defineEmits(["go-page", "change-page-size"]);
+const emit = defineEmits(["go-page"]);
 </script>
 
 <template>
@@ -29,15 +28,5 @@ const emit = defineEmits(["go-page", "change-page-size"]);
     >
       Next →
     </button>
-    <select
-      :value="pageSize"
-      class="page-size"
-      @change="emit('change-page-size', Number($event.target.value))"
-    >
-      <option :value="5">5 / page</option>
-      <option :value="10">10 / page</option>
-      <option :value="20">20 / page</option>
-      <option :value="50">50 / page</option>
-    </select>
   </div>
 </template>

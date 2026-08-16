@@ -92,43 +92,42 @@ export function useTableData() {
         fkOptions.value = {};
         return;
       }
-      // 主数据（hero 走后端分页，其余表数据量小直接全量）
+      // 主数据：所有表都走后端分页（offset/limit + total）
+      const offset = (page.value - 1) * pageSize.value;
+      const limit = pageSize.value;
+      let data;
       if (name === "hero") {
-        const data = await api(
-          `/heroes?offset=${(page.value - 1) * pageSize.value}&limit=${pageSize.value}`
-        );
-        // 兼容新旧后端：{items,total} 或纯数组，避免 rows 为 undefined 导致模板崩溃
-        rows.value = Array.isArray(data) ? data : data?.items ?? [];
-        total.value = Array.isArray(data) ? data.length : data?.total ?? 0;
+        data = await api(`/heroes?offset=${offset}&limit=${limit}`);
       } else if (name === "team") {
-        rows.value = await api("/teams");
+        data = await api(`/teams?offset=${offset}&limit=${limit}`);
       } else if (name === "mission") {
-        rows.value = await api("/missions");
+        data = await api(`/missions?offset=${offset}&limit=${limit}`);
       } else if (name === "mission_hero") {
-        rows.value = await api("/missions/links");
+        data = await api(`/missions/links?offset=${offset}&limit=${limit}`);
       }
-      // 外键选项（并行加载关联表）
+      // 兼容新旧后端：{items,total} 或纯数组，避免 rows 为 undefined 导致模板崩溃
+      rows.value = Array.isArray(data) ? data : data?.items ?? [];
+      total.value = Array.isArray(data) ? data.length : data?.total ?? 0;
+      // 外键选项（并行加载关联表，兼容 {items,total} 或纯数组）
       const fks = FK_COLUMNS[name] || [];
       const tasks = [];
       if (fks.includes("team_id")) {
         tasks.push(
-          api("/teams").then(
+          api("/teams?limit=100").then(
             (d) =>
-              (fkOptions.value.team_id = (d ?? []).map((t) => ({
-                id: t.id,
-                label: t.name,
-              })))
+              (fkOptions.value.team_id = (Array.isArray(d) ? d : d?.items ?? []).map(
+                (t) => ({ id: t.id, label: t.name })
+              ))
           )
         );
       }
       if (fks.includes("mission_id")) {
         tasks.push(
-          api("/missions").then(
+          api("/missions?limit=100").then(
             (d) =>
-              (fkOptions.value.mission_id = (d ?? []).map((m) => ({
-                id: m.id,
-                label: m.name,
-              })))
+              (fkOptions.value.mission_id = (Array.isArray(d) ? d : d?.items ?? []).map(
+                (m) => ({ id: m.id, label: m.name })
+              ))
           )
         );
       }

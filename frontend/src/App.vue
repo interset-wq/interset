@@ -40,12 +40,6 @@ const {
 function currentFkColumns() {
   return FK_COLUMNS[activeTable.value] || [];
 }
-
-// 分页控件修改每页条数后重新加载当前页
-function changePageSize(size) {
-  pageSize.value = size;
-  loadTable(activeTable.value, false);
-}
 </script>
 
 <template>
@@ -109,13 +103,10 @@ function changePageSize(size) {
           />
 
           <PaginationBar
-            v-if="activeTable === 'hero'"
             :page="page"
             :total-pages="totalPages"
             :total="total"
-            :page-size="pageSize"
             @go-page="goToPage"
-            @change-page-size="changePageSize"
           />
 
           <p v-if="!rows.length" class="muted">0 rows</p>
