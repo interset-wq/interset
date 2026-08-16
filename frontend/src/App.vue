@@ -132,6 +132,115 @@ async function deleteHero(id) {
   }
 }
 
+// 查看单个英雄详情（GET /heroes/{id}）
+const heroDetail = ref(null);
+async function viewHero(id) {
+  error.value = "";
+  try {
+    heroDetail.value = await api(`/heroes/${id}`);
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+// 行内编辑英雄（PATCH /heroes/{id}）
+const editingHeroId = ref(null);
+const editHeroForm = ref({ name: "", secret_name: "", age: null, team_id: null });
+
+function startEditHero(h) {
+  editingHeroId.value = h.id;
+  editHeroForm.value = {
+    name: h.name,
+    secret_name: h.secret_name,
+    age: h.age,
+    team_id: h.team_id,
+  };
+}
+
+function cancelEditHero() {
+  editingHeroId.value = null;
+}
+
+async function saveHero(id) {
+  error.value = "";
+  loading.value = true;
+  try {
+    await api(`/heroes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: editHeroForm.value.name,
+        secret_name: editHeroForm.value.secret_name,
+        age: editHeroForm.value.age || null,
+        team_id: editHeroForm.value.team_id || null,
+      }),
+    });
+    editingHeroId.value = null;
+    await loadAll();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 查看单个团队详情（GET /teams/{id}）
+const teamDetail = ref(null);
+async function viewTeam(id) {
+  error.value = "";
+  try {
+    teamDetail.value = await api(`/teams/${id}`);
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+// 行内编辑团队（PATCH /teams/{id}）
+const editingTeamId = ref(null);
+const editTeamForm = ref({ name: "", headquarters: "" });
+
+function startEditTeam(t) {
+  editingTeamId.value = t.id;
+  editTeamForm.value = {
+    name: t.name,
+    headquarters: t.headquarters,
+  };
+}
+
+function cancelEditTeam() {
+  editingTeamId.value = null;
+}
+
+async function saveTeam(id) {
+  error.value = "";
+  loading.value = true;
+  try {
+    await api(`/teams/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: editTeamForm.value.name,
+        headquarters: editTeamForm.value.headquarters,
+      }),
+    });
+    editingTeamId.value = null;
+    await loadAll();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 删除团队（DELETE /teams/{id}）
+async function deleteTeam(id) {
+  error.value = "";
+  try {
+    await api(`/teams/${id}`, { method: "DELETE" });
+    await loadAll();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
 onMounted(async () => {
   try {
     health.value = await api("/health");
@@ -183,6 +292,14 @@ onMounted(async () => {
         </button>
       </form>
 
+      <div v-if="heroDetail" class="detail-box">
+        <strong>GET /api/heroes/{{ heroDetail.id }}</strong>
+        <pre>{{ JSON.stringify(heroDetail, null, 2) }}</pre>
+        <button class="secondary" @click="heroDetail = null">Close</button>
+      </div>
+
+      <h3 class="query-sql">SELECT * FROM hero</h3>
+
       <div class="table-wrap">
         <table class="cli-table">
           <thead>
@@ -196,14 +313,36 @@ onMounted(async () => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="h in heroes" :key="h.id">
-              <td>{{ h.id }}</td>
-              <td>{{ h.name }}</td>
-              <td>{{ h.secret_name }}</td>
-              <td>{{ h.age ?? "NULL" }}</td>
-              <td>{{ teamName(h.team_id) }}</td>
-              <td><button class="danger" @click="deleteHero(h.id)">Delete</button></td>
-            </tr>
+            <template v-for="h in heroes" :key="h.id">
+              <tr v-if="editingHeroId === h.id">
+                <td>{{ h.id }}</td>
+                <td><input v-model="editHeroForm.name" placeholder="Hero name" /></td>
+                <td><input v-model="editHeroForm.secret_name" placeholder="Secret identity" /></td>
+                <td><input v-model.number="editHeroForm.age" type="number" placeholder="Age" /></td>
+                <td>
+                  <select v-model="editHeroForm.team_id">
+                    <option :value="null">— No team —</option>
+                    <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
+                  </select>
+                </td>
+                <td>
+                  <button @click="saveHero(h.id)">Save</button>
+                  <button class="secondary" @click="cancelEditHero">Cancel</button>
+                </td>
+              </tr>
+              <tr v-else>
+                <td>{{ h.id }}</td>
+                <td>{{ h.name }}</td>
+                <td>{{ h.secret_name }}</td>
+                <td>{{ h.age ?? "NULL" }}</td>
+                <td>{{ teamName(h.team_id) }}</td>
+                <td>
+                  <button class="secondary" @click="viewHero(h.id)">View</button>
+                  <button class="secondary" @click="startEditHero(h)">Edit</button>
+                  <button class="danger" @click="deleteHero(h.id)">Delete</button>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -221,6 +360,14 @@ onMounted(async () => {
         </button>
       </form>
 
+      <div v-if="teamDetail" class="detail-box">
+        <strong>GET /api/teams/{{ teamDetail.id }}</strong>
+        <pre>{{ JSON.stringify(teamDetail, null, 2) }}</pre>
+        <button class="secondary" @click="teamDetail = null">Close</button>
+      </div>
+
+      <h3 class="query-sql">SELECT * FROM team</h3>
+
       <div class="table-wrap">
         <table class="cli-table">
           <thead>
@@ -229,20 +376,43 @@ onMounted(async () => {
               <th>name</th>
               <th>headquarters</th>
               <th>heroes</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="t in teams" :key="t.id">
-              <td>{{ t.id }}</td>
-              <td>{{ t.name }}</td>
-              <td>{{ t.headquarters }}</td>
-              <td>
-                <template v-if="t.heroes.length">
-                  {{ t.heroes.map((h) => h.name).join(", ") }}
-                </template>
-                <template v-else>NULL</template>
-              </td>
-            </tr>
+            <template v-for="t in teams" :key="t.id">
+              <tr v-if="editingTeamId === t.id">
+                <td>{{ t.id }}</td>
+                <td><input v-model="editTeamForm.name" placeholder="Team name" /></td>
+                <td><input v-model="editTeamForm.headquarters" placeholder="Headquarters" /></td>
+                <td>
+                  <template v-if="t.heroes.length">
+                    {{ t.heroes.map((h) => h.name).join(", ") }}
+                  </template>
+                  <template v-else>NULL</template>
+                </td>
+                <td>
+                  <button @click="saveTeam(t.id)">Save</button>
+                  <button class="secondary" @click="cancelEditTeam">Cancel</button>
+                </td>
+              </tr>
+              <tr v-else>
+                <td>{{ t.id }}</td>
+                <td>{{ t.name }}</td>
+                <td>{{ t.headquarters }}</td>
+                <td>
+                  <template v-if="t.heroes.length">
+                    {{ t.heroes.map((h) => h.name).join(", ") }}
+                  </template>
+                  <template v-else>NULL</template>
+                </td>
+                <td>
+                  <button class="secondary" @click="viewTeam(t.id)">View</button>
+                  <button class="secondary" @click="startEditTeam(t)">Edit</button>
+                  <button class="danger" @click="deleteTeam(t.id)">Delete</button>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -393,6 +563,20 @@ h1 {
   color: #555;
 }
 
+/* 表格对应的查询 SQL 标题 */
+.query-sql {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #2c6fbb;
+  background: #eef4fc;
+  border-left: 3px solid #2c6fbb;
+  padding: 6px 10px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
 form {
   display: flex;
   flex-wrap: wrap;
@@ -429,6 +613,36 @@ button.danger {
   background: #e74c3c;
   padding: 3px 10px;
   font-size: 0.85rem;
+}
+
+button.secondary {
+  background: #7f8c8d;
+  padding: 3px 10px;
+  font-size: 0.85rem;
+}
+
+/* 单个记录详情（GET /{id} 结果） */
+.detail-box {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #f0f2f7;
+  border: 1px solid #d5d8e0;
+  border-radius: 6px;
+}
+
+.detail-box strong {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.detail-box pre {
+  margin: 8px 0;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e2e5ec;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  overflow-x: auto;
 }
 
 /* ---- SQL CLI 风格表格 ---- */
