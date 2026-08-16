@@ -1,11 +1,13 @@
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 
-// 页面数据：英雄、团队、健康状态、SQL 执行日志
+// 页面数据：英雄、团队、健康状态、SQL 执行日志、关联表、表结构
 const heroes = ref([]);
 const teams = ref([]);
 const health = ref(null);
 const sqlLogs = ref([]);
+const joined = ref([]);
+const tables = ref([]);
 const error = ref("");
 const loading = ref(false);
 
@@ -41,14 +43,18 @@ async function api(path, options = {}) {
 }
 
 async function loadAll() {
-  const [hs, ts, logs] = await Promise.all([
+  const [hs, ts, logs, jd, tbs] = await Promise.all([
     api("/heroes?limit=100"),
     api("/teams"),
     api("/sql-logs?limit=5"),
+    api("/heroes/joined"),
+    api("/tables"),
   ]);
   heroes.value = hs;
   teams.value = ts;
   sqlLogs.value = logs;
+  joined.value = jd;
+  tables.value = tbs;
 }
 
 // 英雄表格里显示团队名（id → name），无团队显示 NULL
@@ -56,18 +62,6 @@ function teamName(id) {
   if (!id) return "NULL";
   return teams.value.find((t) => t.id === id)?.name ?? `#${id}`;
 }
-
-// 关联表：hero LEFT JOIN team 的结果（每个英雄一行，含所属团队名）
-const joined = computed(() =>
-  heroes.value.map((h) => ({
-    id: h.id,
-    name: h.name,
-    secret_name: h.secret_name,
-    age: h.age,
-    team_id: h.team_id,
-    team_name: teamName(h.team_id),
-  }))
-);
 
 // 新增团队
 async function createTeam() {
@@ -274,6 +268,9 @@ onMounted(async () => {
       <button :class="{ active: activeTab === 'joined' }" @click="activeTab = 'joined'">
         hero LEFT JOIN team（{{ joined.length }}）
       </button>
+      <button :class="{ active: activeTab === 'schema' }" @click="activeTab = 'schema'">
+        schema（{{ tables.length }}）
+      </button>
     </nav>
 
     <!-- 英雄 Tab：表单 + hero 表 -->
@@ -448,6 +445,35 @@ onMounted(async () => {
         </table>
       </div>
       <p v-if="!joined.length" class="muted">0 rows — no joined rows yet</p>
+    </section>
+
+    <!-- 表结构 Tab：psql \d 风格 -->
+    <section v-if="activeTab === 'schema'" class="card">
+      <h2>Schema（\d tables）</h2>
+
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr>
+              <th>table</th>
+              <th>column</th>
+              <th>type</th>
+              <th>nullable</th>
+              <th>primary_key</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(col, i) in tables" :key="i">
+              <td>{{ col.table }}</td>
+              <td>{{ col.column }}</td>
+              <td>{{ col.type }}</td>
+              <td>{{ col.nullable ? "YES" : "NO" }}</td>
+              <td>{{ col.primary_key ? "YES" : "" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!tables.length" class="muted">0 rows — no tables found</p>
     </section>
 
     <!-- SQL 日志：content 区域下方独立 section，始终显示 -->
