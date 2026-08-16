@@ -111,17 +111,18 @@ async function loadTable(name, resetPage = true) {
       const data = await api(
         `/heroes?offset=${(page.value - 1) * pageSize.value}&limit=${pageSize.value}`
       );
-      rows.value = data.items;
-      total.value = data.total;
+      // 兼容新旧后端：{items,total} 或纯数组，避免 rows 为 undefined 导致模板崩溃
+      rows.value = Array.isArray(data) ? data : data?.items ?? [];
+      total.value = Array.isArray(data) ? data.length : data?.total ?? 0;
     } else if (name === "team") rows.value = await api("/teams");
     else if (name === "mission") rows.value = await api("/missions");
     else if (name === "mission_hero") rows.value = await api("/missions/links");
     // 外键选项（并行加载关联表）
     const fks = FK_COLUMNS[name] || [];
     const tasks = [];
-    if (fks.includes("team_id")) tasks.push(api("/teams").then((d) => (fkOptions.value.team_id = d.map((t) => ({ id: t.id, label: t.name })))));
-    if (fks.includes("mission_id")) tasks.push(api("/missions").then((d) => (fkOptions.value.mission_id = d.map((m) => ({ id: m.id, label: m.name })))));
-    if (fks.includes("hero_id")) tasks.push(api("/heroes?limit=100").then((d) => (fkOptions.value.hero_id = d.items.map((h) => ({ id: h.id, label: h.name })))));
+    if (fks.includes("team_id")) tasks.push(api("/teams").then((d) => (fkOptions.value.team_id = (d ?? []).map((t) => ({ id: t.id, label: t.name })))));
+    if (fks.includes("mission_id")) tasks.push(api("/missions").then((d) => (fkOptions.value.mission_id = (d ?? []).map((m) => ({ id: m.id, label: m.name })))));
+    if (fks.includes("hero_id")) tasks.push(api("/heroes?limit=100").then((d) => (fkOptions.value.hero_id = (Array.isArray(d) ? d : d?.items ?? []).map((h) => ({ id: h.id, label: h.name })))));
     await Promise.all(tasks);
     await loadSqlLogs();
   } catch (e) {
