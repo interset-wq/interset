@@ -1,6 +1,8 @@
 <script setup>
-// 插入行表单：按列生成输入项，外键列渲染为下拉选择
-defineProps({
+// 插入行表单：按列生成输入项，外键列渲染为下拉选择；主键列（id 等）不在表单中创建
+import { computed } from "vue";
+
+const props = defineProps({
   columns: { type: Array, required: true },
   fkColumns: { type: Array, default: () => [] },
   fkOptions: { type: Object, default: () => ({}) },
@@ -9,11 +11,16 @@ defineProps({
 });
 
 const emit = defineEmits(["save", "cancel"]);
+
+// 仅展示非主键列（PK 由数据库自动生成，禁止通过表单填写）
+const editableColumns = computed(() =>
+  props.columns.filter((c) => !c.primary_key)
+);
 </script>
 
 <template>
   <form class="insert-form" @submit.prevent="emit('save')">
-    <label v-for="c in columns" :key="c.column" class="insert-field">
+    <label v-for="c in editableColumns" :key="c.column" class="insert-field">
       <span>{{ c.column }}</span>
       <select
         v-if="fkColumns.includes(c.column)"
