@@ -101,3 +101,17 @@ class MissionHeroLinkRead(SQLModel):
     role: Optional[str] = None
     mission_name: Optional[str] = None
     hero_name: Optional[str] = None
+
+
+class MissionHeroLinkCreate(SQLModel):
+    """创建 mission_hero 中间表行的请求体（关联任务与英雄）。"""
+
+    mission_id: int
+    hero_id: int
+    role: Optional[str] = Field(default=None, max_length=80)
+
+
+class MissionHeroLinkUpdate(SQLModel):
+    """更新 mission_hero 中间表行的请求体（目前仅 role 可改）。"""
+
+    role: Optional[str] = Field(default=None, max_length=80)

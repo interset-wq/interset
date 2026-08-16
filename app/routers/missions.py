@@ -9,11 +9,30 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import Hero, Mission, MissionHeroLink
-from app.schemas import MissionCreate, MissionHeroLinkRead, MissionRead
+from app.schemas import (
+    MissionCreate,
+    MissionHeroLinkCreate,
+    MissionHeroLinkRead,
+    MissionHeroLinkUpdate,
+    MissionRead,
+)
 
 router = APIRouter(prefix="/missions", tags=["missions"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+def _link_with_names(link: MissionHeroLink, session: Session) -> dict:
+    """把中间表行附上任务名与英雄名，供响应返回（PSQL 风格展示）。"""
+    mission = session.get(Mission, link.mission_id)
+    hero = session.get(Hero, link.hero_id)
+    return {
+        "mission_id": link.mission_id,
+        "hero_id": link.hero_id,
+        "role": link.role,
+        "mission_name": mission.name if mission else None,
+        "hero_name": hero.name if hero else None,
+    }
 
 
 @router.get("/links", response_model=list[MissionHeroLinkRead])
@@ -35,6 +54,57 @@ def read_mission_hero_links(session: SessionDep) -> list[dict]:
         }
         for link, mission_name, hero_name in rows
     ]
+
+
+@router.post("/links", response_model=MissionHeroLinkRead, status_code=status.HTTP_201_CREATED)
+def create_mission_hero_link(
+    link: MissionHeroLinkCreate, session: SessionDep
+) -> dict:
+    """创建 mission_hero 中间表行（关联任务与英雄，可带 role）。"""
+    db_link = MissionHeroLink.model_validate(link)
+    session.add(db_link)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mission-Hero link already exists",
+        )
+    session.refresh(db_link)
+    return _link_with_names(db_link, session)
+
+
+@router.patch("/links/{mission_id}/{hero_id}", response_model=MissionHeroLinkRead)
+def update_mission_hero_link(
+    mission_id: int, hero_id: int, link: MissionHeroLinkUpdate, session: SessionDep
+) -> dict:
+    """更新中间表 mission_hero 的行（目前仅 role）。"""
+    db_link = session.get(MissionHeroLink, (mission_id, hero_id))
+    if not db_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Mission-Hero link not found"
+        )
+    link_data = link.model_dump(exclude_unset=True)
+    db_link.sqlmodel_update(link_data)
+    session.add(db_link)
+    session.commit()
+    session.refresh(db_link)
+    return _link_with_names(db_link, session)
+
+
+@router.delete(
+    "/links/{mission_id}/{hero_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_mission_hero_link(mission_id: int, hero_id: int, session: SessionDep) -> None:
+    """删除中间表 mission_hero 的行（取消任务与英雄的关联）。"""
+    db_link = session.get(MissionHeroLink, (mission_id, hero_id))
+    if not db_link:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Mission-Hero link not found"
+        )
+    session.delete(db_link)
+    session.commit()
 
 
 @router.get("", response_model=list[MissionRead])
