@@ -84,9 +84,9 @@ const FK_COLUMNS = {
   team: [],
 };
 
-// 分页状态（hero 表使用后端分页）
+// 分页状态（hero 表使用后端分页，默认每页 5 条）
 const page = ref(1);
-const pageSize = ref(10);
+const pageSize = ref(5);
 const total = ref(0);
 
 // 总页数
@@ -465,6 +465,7 @@ onMounted(async () => {
               class="page-size"
               @change="loadTable(activeTable, false)"
             >
+              <option :value="5">5 / page</option>
               <option :value="10">10 / page</option>
               <option :value="20">20 / page</option>
               <option :value="50">50 / page</option>
