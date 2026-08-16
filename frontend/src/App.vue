@@ -794,4 +794,75 @@ button.small {
   white-space: nowrap;
   color: #666;
 }
+
+/* ---- 移动端适配 ---- */
+@media (max-width: 768px) {
+  .container {
+    padding: 16px 10px 40px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  /* 布局改为上下堆叠：sidebar 在上，数据网格在下 */
+  .editor-layout {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  /* sidebar 全宽、表名横排滚动 */
+  .sidebar {
+    flex: none;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .sidebar-title {
+    width: 100%;
+    padding-bottom: 4px;
+  }
+
+  .sidebar-sep {
+    width: 100%;
+  }
+
+  .table-item {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 6px 10px;
+    border: 1px solid #e2e5ec;
+  }
+
+  .grid-panel {
+    padding: 10px;
+  }
+
+  .grid-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .grid-toolbar button {
+    flex: 1 1 auto;
+  }
+
+  /* 表格容器横向滚动，避免挤压列宽 */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .insert-form {
+    gap: 6px;
+  }
+
+  .insert-field {
+    flex: 1 1 45%;
+    min-width: 120px;
+  }
+}
 </style>
