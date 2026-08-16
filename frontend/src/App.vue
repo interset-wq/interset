@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 // 页面数据：英雄、团队、健康状态、SQL 执行日志
 const heroes = ref([]);
@@ -56,6 +56,18 @@ function teamName(id) {
   if (!id) return "NULL";
   return teams.value.find((t) => t.id === id)?.name ?? `#${id}`;
 }
+
+// 关联表：hero LEFT JOIN team 的结果（每个英雄一行，含所属团队名）
+const joined = computed(() =>
+  heroes.value.map((h) => ({
+    id: h.id,
+    name: h.name,
+    secret_name: h.secret_name,
+    age: h.age,
+    team_id: h.team_id,
+    team_name: teamName(h.team_id),
+  }))
+);
 
 // 新增团队
 async function createTeam() {
@@ -150,6 +162,9 @@ onMounted(async () => {
       <button :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
         team（{{ teams.length }}）
       </button>
+      <button :class="{ active: activeTab === 'joined' }" @click="activeTab = 'joined'">
+        hero LEFT JOIN team（{{ joined.length }}）
+      </button>
     </nav>
 
     <!-- 英雄 Tab：表单 + hero 表 -->
@@ -234,6 +249,37 @@ onMounted(async () => {
       <p v-if="!teams.length" class="muted">0 rows — no teams yet, create one!</p>
     </section>
 
+    <!-- 关联表 Tab：hero LEFT JOIN team -->
+    <section v-if="activeTab === 'joined'" class="card">
+      <h2>SELECT hero.*, team.name AS team_name FROM hero LEFT JOIN team</h2>
+
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>name</th>
+              <th>secret_name</th>
+              <th>age</th>
+              <th>team_id</th>
+              <th>team_name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in joined" :key="row.id">
+              <td>{{ row.id }}</td>
+              <td>{{ row.name }}</td>
+              <td>{{ row.secret_name }}</td>
+              <td>{{ row.age ?? "NULL" }}</td>
+              <td>{{ row.team_id ?? "NULL" }}</td>
+              <td>{{ row.team_name }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!joined.length" class="muted">0 rows — no joined rows yet</p>
+    </section>
+
     <!-- SQL 日志：content 区域下方独立 section，始终显示 -->
     <section class="card">
       <h2>SQL Log (recent {{ sqlLogs.length }}, newest first)</h2>
@@ -270,7 +316,9 @@ onMounted(async () => {
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* 全站统一使用代码友好（等宽）字体，与 SQL 列保持一致 */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New",
+    monospace;
   background: #f5f6fa;
   color: #2c3e50;
 }
