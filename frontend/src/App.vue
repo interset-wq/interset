@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 // 页面数据：英雄、团队、健康状态、SQL 执行日志、关联表、表结构
 const heroes = ref([]);
@@ -61,6 +61,22 @@ async function loadAll() {
 function teamName(id) {
   if (!id) return "NULL";
   return teams.value.find((t) => t.id === id)?.name ?? `#${id}`;
+}
+
+// 表结构按表分组（psql \d 风格：每张表一个表格）
+const tableGroups = computed(() => {
+  const map = new Map();
+  for (const col of tables.value) {
+    if (!map.has(col.table)) map.set(col.table, []);
+    map.get(col.table).push(col);
+  }
+  return [...map.entries()].map(([table, columns]) => ({ table, columns }));
+});
+
+// 某张表的主键列（psql Indexes 行展示）
+function pkColumns(group) {
+  const pks = group.columns.filter((c) => c.primary_key).map((c) => c.column);
+  return pks.length ? pks.join(", ") : "(none)";
 }
 
 // 新增团队
@@ -447,33 +463,36 @@ onMounted(async () => {
       <p v-if="!joined.length" class="muted">0 rows — no joined rows yet</p>
     </section>
 
-    <!-- 表结构 Tab：psql \d 风格 -->
+    <!-- 表结构 Tab：psql \d 风格，每张表一个表格 -->
     <section v-if="activeTab === 'schema'" class="card">
-      <h2>Schema（\d tables）</h2>
+      <h2>Schema（psql \d）</h2>
 
-      <div class="table-wrap">
-        <table class="cli-table">
-          <thead>
-            <tr>
-              <th>table</th>
-              <th>column</th>
-              <th>type</th>
-              <th>nullable</th>
-              <th>primary_key</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(col, i) in tables" :key="i">
-              <td>{{ col.table }}</td>
-              <td>{{ col.column }}</td>
-              <td>{{ col.type }}</td>
-              <td>{{ col.nullable ? "YES" : "NO" }}</td>
-              <td>{{ col.primary_key ? "YES" : "" }}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div v-for="group in tableGroups" :key="group.table" class="schema-table">
+        <h3 class="query-sql">Table "{{ group.table }}"</h3>
+        <div class="table-wrap">
+          <table class="cli-table">
+            <thead>
+              <tr>
+                <th>Column</th>
+                <th>Type</th>
+                <th>Nullable</th>
+                <th>Default</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="col in group.columns" :key="col.column">
+                <td>{{ col.column }}</td>
+                <td>{{ col.type }}</td>
+                <td>{{ col.nullable ? "" : "not null" }}</td>
+                <td>{{ col.default ?? "" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="indexes">Indexes: PRIMARY KEY ({{ pkColumns(group) }})</p>
       </div>
-      <p v-if="!tables.length" class="muted">0 rows — no tables found</p>
+
+      <p v-if="!tableGroups.length" class="muted">0 rows — no tables found</p>
     </section>
 
     <!-- SQL 日志：content 区域下方独立 section，始终显示 -->
@@ -601,6 +620,18 @@ h1 {
   padding: 6px 10px;
   border-radius: 4px;
   word-break: break-all;
+}
+
+/* 表结构：每张表一个区块（psql \d 风格） */
+.schema-table {
+  margin-bottom: 20px;
+}
+
+.schema-table .indexes {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #7f8c8d;
 }
 
 form {
