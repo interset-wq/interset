@@ -3,6 +3,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
@@ -39,9 +40,15 @@ def read_team(team_id: int, session: SessionDep) -> Team:
 
 @router.post("", response_model=TeamRead, status_code=status.HTTP_201_CREATED)
 def create_team(team: TeamCreate, session: SessionDep) -> Team:
-    """创建团队。"""
+    """创建团队（name 唯一，重名返回 409）。"""
     db_team = Team.model_validate(team)
     session.add(db_team)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Team name already exists"
+        )
     session.refresh(db_team)
     return db_team
