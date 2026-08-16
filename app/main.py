@@ -1,6 +1,5 @@
 """FastAPI 应用组装：lifespan 建表、挂载路由、前端托管。"""
 
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -35,8 +34,6 @@ app.include_router(heroes.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
 
 # 托管前端构建产物（低优先级路由：API 优先匹配，SPA 客户端路由回退到 index.html）
-# 仅当 dist 存在时挂载：本地部署由 .fastapicloudignore 的 !dist/ 保证上传，
-# 但基于 git 的部署（如 GitHub 集成，云端不运行前端构建）不会包含 dist，
-# 此时跳过挂载可避免应用在导入阶段崩溃，API 仍正常可用。
-if os.path.isdir("dist"):
-    app.frontend("/", directory="dist")
+# 按 FastAPI Cloud 前端部署文档：部署前须本地先构建前端（pnpm build），
+# dist/ 由 .fastapicloudignore 的 !dist/ 随部署上传。
+app.frontend("/", directory="dist")
