@@ -1,13 +1,16 @@
 <script setup>
 import { onMounted, ref } from "vue";
 
-// 页面数据：英雄列表、团队列表、后端健康状态、SQL 执行日志
+// 页面数据：英雄、团队、健康状态、SQL 执行日志
 const heroes = ref([]);
 const teams = ref([]);
 const health = ref(null);
 const sqlLogs = ref([]);
 const error = ref("");
 const loading = ref(false);
+
+// 当前激活的 Tab：heroes / teams / logs
+const activeTab = ref("heroes");
 
 // 新增英雄表单
 const form = ref({
@@ -46,6 +49,12 @@ async function loadAll() {
   heroes.value = hs;
   teams.value = ts;
   sqlLogs.value = logs;
+}
+
+// 英雄表格里显示团队名（id → name），无团队显示 NULL
+function teamName(id) {
+  if (!id) return "NULL";
+  return teams.value.find((t) => t.id === id)?.name ?? `#${id}`;
 }
 
 // 新增团队
@@ -131,8 +140,24 @@ onMounted(async () => {
       </span>
     </p>
 
-    <section class="card">
-      <h2>新增英雄</h2>
+    <p v-if="error" class="err">{{ error }}</p>
+
+    <!-- Tab 导航 -->
+    <nav class="tabs">
+      <button :class="{ active: activeTab === 'heroes' }" @click="activeTab = 'heroes'">
+        hero（{{ heroes.length }}）
+      </button>
+      <button :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
+        team（{{ teams.length }}）
+      </button>
+      <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">
+        sql_log（{{ sqlLogs.length }}）
+      </button>
+    </nav>
+
+    <!-- 英雄 Tab：表单 + hero 表 -->
+    <section v-if="activeTab === 'heroes'" class="card">
+      <h2>INSERT INTO hero</h2>
       <form @submit.prevent="createHero">
         <input v-model="form.name" placeholder="name（必填）" />
         <input v-model="form.secret_name" placeholder="secret_name（必填）" />
@@ -145,10 +170,37 @@ onMounted(async () => {
           {{ loading ? "提交中…" : "创建" }}
         </button>
       </form>
+
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>name</th>
+              <th>secret_name</th>
+              <th>age</th>
+              <th>team</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="h in heroes" :key="h.id">
+              <td>{{ h.id }}</td>
+              <td>{{ h.name }}</td>
+              <td>{{ h.secret_name }}</td>
+              <td>{{ h.age ?? "NULL" }}</td>
+              <td>{{ teamName(h.team_id) }}</td>
+              <td><button class="danger" @click="deleteHero(h.id)">删除</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!heroes.length" class="muted">0 rows — 暂无英雄，创建第一个吧！</p>
     </section>
 
-    <section class="card">
-      <h2>新增团队</h2>
+    <!-- 团队 Tab：表单 + team 表 -->
+    <section v-if="activeTab === 'teams'" class="card">
+      <h2>INSERT INTO team</h2>
       <form @submit.prevent="createTeam">
         <input v-model="teamForm.name" placeholder="name（必填）" />
         <input v-model="teamForm.headquarters" placeholder="headquarters" />
@@ -156,43 +208,59 @@ onMounted(async () => {
           {{ loading ? "提交中…" : "创建团队" }}
         </button>
       </form>
+
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>name</th>
+              <th>headquarters</th>
+              <th>heroes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="t in teams" :key="t.id">
+              <td>{{ t.id }}</td>
+              <td>{{ t.name }}</td>
+              <td>{{ t.headquarters }}</td>
+              <td>
+                <template v-if="t.heroes.length">
+                  {{ t.heroes.map((h) => h.name).join(", ") }}
+                </template>
+                <template v-else>NULL</template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!teams.length" class="muted">0 rows — 暂无团队，先创建一个吧！</p>
     </section>
 
-    <section class="card">
-      <h2>团队（{{ teams.length }}）</h2>
-      <ul v-if="teams.length">
-        <li v-for="t in teams" :key="t.id">
-          <strong>{{ t.name }}</strong> · {{ t.headquarters }} · {{ t.heroes.length }} 名成员
-        </li>
-      </ul>
-      <p v-else class="muted">暂无团队，先创建一个吧！</p>
-    </section>
+    <!-- SQL 日志 Tab -->
+    <section v-if="activeTab === 'logs'" class="card">
+      <h2>sql_log（最近 {{ sqlLogs.length }} 条，最新在前）</h2>
+      <p class="muted">每次操作（查询 / 新增 / 删除）实际执行的 SQL 语句与参数。</p>
 
-    <section class="card">
-      <h2>英雄列表（{{ heroes.length }}）</h2>
-      <p v-if="error" class="err">{{ error }}</p>
-      <ul v-if="heroes.length">
-        <li v-for="h in heroes" :key="h.id">
-          {{ h.name }}（{{ h.secret_name }}）
-          <template v-if="h.age !== null">，{{ h.age }} 岁</template>
-          <template v-if="h.team_id">，队伍 #{{ h.team_id }}</template>
-          <button class="danger" @click="deleteHero(h.id)">删除</button>
-        </li>
-      </ul>
-      <p v-else class="muted">暂无英雄，创建第一个吧！</p>
-    </section>
-
-    <section class="card">
-      <h2>SQL 执行日志（最近 {{ sqlLogs.length }} 条）</h2>
-      <p class="muted">每次操作（查询/新增/删除）对应的 SQL 语句，最新的在前。</p>
-      <ul v-if="sqlLogs.length" class="sql-log">
-        <li v-for="(log, i) in sqlLogs" :key="i">
-          <code>{{ log.sql }}</code>
-          <span v-if="log.params" class="muted">{{ log.params }}</span>
-          <span class="log-time">{{ log.time }}</span>
-        </li>
-      </ul>
-      <p v-else class="muted">暂无 SQL 日志</p>
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr>
+              <th>time</th>
+              <th>sql</th>
+              <th>params</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(log, i) in sqlLogs" :key="i">
+              <td class="log-time">{{ log.time }}</td>
+              <td><code>{{ log.sql }}</code></td>
+              <td class="log-params">{{ log.params }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!sqlLogs.length" class="muted">0 rows — 暂无 SQL 日志</p>
     </section>
   </main>
 </template>
@@ -210,7 +278,7 @@ body {
 }
 
 .container {
-  max-width: 720px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 24px 16px 48px;
 }
@@ -233,10 +301,35 @@ h1 {
 
 .err {
   color: #e74c3c;
+  font-weight: 600;
 }
 
 .muted {
   color: #999;
+}
+
+/* ---- Tab 导航 ---- */
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.tabs button {
+  padding: 8px 18px;
+  border: 1px solid #d5d8e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #2c3e50;
+  font-size: 0.95rem;
+  font-family: ui-monospace, Consolas, monospace;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background: #2c6fbb;
+  border-color: #2c6fbb;
+  color: #fff;
 }
 
 .card {
@@ -249,13 +342,16 @@ h1 {
 
 .card h2 {
   margin-top: 0;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #555;
 }
 
 form {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-bottom: 16px;
 }
 
 input,
@@ -285,35 +381,53 @@ button:disabled {
 
 button.danger {
   background: #e74c3c;
-  margin-left: 8px;
   padding: 3px 10px;
   font-size: 0.85rem;
 }
 
-ul {
-  list-style: none;
-  padding: 0;
-  margin: 8px 0 0;
+/* ---- SQL CLI 风格表格 ---- */
+.table-wrap {
+  overflow-x: auto;
 }
 
-li {
-  padding: 6px 0;
-  border-bottom: 1px dashed #eef0f4;
-}
-
-.sql-log code {
-  display: block;
+.cli-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
   font-size: 0.85rem;
-  background: #f0f2f7;
-  padding: 6px 8px;
-  border-radius: 4px;
+}
+
+.cli-table th,
+.cli-table td {
+  border: 1px solid #d5d8e0;
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.cli-table thead th {
+  background: #2c3e50;
+  color: #fff;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cli-table tbody tr:nth-child(even) {
+  background: #f7f8fc;
+}
+
+.cli-table code {
+  font-size: 0.82rem;
   word-break: break-all;
 }
 
-.sql-log .log-time {
-  float: right;
-  color: #999;
+.cli-table .log-time,
+.cli-table .log-params {
+  white-space: nowrap;
+  color: #666;
+}
+
+.cli-table .log-params {
   font-size: 0.8rem;
-  margin-top: 4px;
 }
 </style>
