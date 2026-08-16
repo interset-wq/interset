@@ -8,7 +8,6 @@ const missions = ref([]);
 const missionLinks = ref([]);
 const health = ref(null);
 const sqlLogs = ref([]);
-const joined = ref([]);
 const tables = ref([]);
 const error = ref("");
 const loading = ref(false);
@@ -52,13 +51,12 @@ async function api(path, options = {}) {
 }
 
 async function loadAll() {
-  const [hs, ts, mss, links, logs, jd, tbs] = await Promise.all([
+  const [hs, ts, mss, links, logs, tbs] = await Promise.all([
     api("/heroes?limit=100"),
     api("/teams"),
     api("/missions"),
     api("/missions/links"),
     api("/sql-logs?limit=5"),
-    api("/heroes/joined"),
     api("/tables"),
   ]);
   heroes.value = hs;
@@ -66,7 +64,6 @@ async function loadAll() {
   missions.value = mss;
   missionLinks.value = links;
   sqlLogs.value = logs;
-  joined.value = jd;
   tables.value = tbs;
 }
 
@@ -329,9 +326,6 @@ onMounted(async () => {
       >
         mission_hero（{{ missionLinks.length }}）
       </button>
-      <button :class="{ active: activeTab === 'joined' }" @click="activeTab = 'joined'">
-        hero LEFT JOIN team（{{ joined.length }}）
-      </button>
       <button :class="{ active: activeTab === 'schema' }" @click="activeTab = 'schema'">
         schema（{{ tables.length }}）
       </button>
@@ -558,37 +552,6 @@ onMounted(async () => {
       <p v-if="!missionLinks.length" class="muted">
         0 rows — no links yet, create a mission with heroes
       </p>
-    </section>
-
-    <!-- 关联表 Tab：hero LEFT JOIN team -->
-    <section v-if="activeTab === 'joined'" class="card">
-      <h2>SELECT hero.*, team.name AS team_name FROM hero LEFT JOIN team</h2>
-
-      <div class="table-wrap">
-        <table class="cli-table">
-          <thead>
-            <tr>
-              <th>id</th>
-              <th>name</th>
-              <th>secret_name</th>
-              <th>age</th>
-              <th>team_id</th>
-              <th>team_name</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in joined" :key="row.id">
-              <td>{{ row.id }}</td>
-              <td>{{ row.name }}</td>
-              <td>{{ row.secret_name }}</td>
-              <td>{{ row.age ?? "NULL" }}</td>
-              <td>{{ row.team_id ?? "NULL" }}</td>
-              <td>{{ row.team_name }}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-if="!joined.length" class="muted">0 rows — no joined rows yet</p>
     </section>
 
     <!-- 表结构 Tab：psql \d 风格，每张表一个表格 -->
