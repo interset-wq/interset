@@ -2,7 +2,8 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
@@ -15,6 +16,8 @@ from app.schemas import (
     MissionHeroLinkRead,
     MissionHeroLinkUpdate,
     MissionRead,
+    PaginatedMissionHeroLinks,
+    PaginatedMissions,
 )
 
 router = APIRouter(prefix="/missions", tags=["missions"])
@@ -35,16 +38,23 @@ def _link_with_names(link: MissionHeroLink, session: Session) -> dict:
     }
 
 
-@router.get("/links", response_model=list[MissionHeroLinkRead])
-def read_mission_hero_links(session: SessionDep) -> list[dict]:
-    """返回 mission_hero 中间表的实际数据行（DB 层面），附任务名与英雄名。"""
+@router.get("/links", response_model=PaginatedMissionHeroLinks)
+def read_mission_hero_links(
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> dict:
+    """分页返回 mission_hero 中间表的实际数据行，附任务名与英雄名。"""
+    total = session.exec(select(func.count()).select_from(MissionHeroLink)).one()
     rows = session.exec(
         select(MissionHeroLink, Mission.name, Hero.name)
         .join(Mission, Mission.id == MissionHeroLink.mission_id)
         .join(Hero, Hero.id == MissionHeroLink.hero_id)
         .order_by(MissionHeroLink.mission_id, MissionHeroLink.hero_id)
+        .offset(offset)
+        .limit(limit)
     ).all()
-    return [
+    items = [
         {
             "mission_id": link.mission_id,
             "hero_id": link.hero_id,
@@ -54,6 +64,7 @@ def read_mission_hero_links(session: SessionDep) -> list[dict]:
         }
         for link, mission_name, hero_name in rows
     ]
+    return {"items": items, "total": total}
 
 
 @router.post("/links", response_model=MissionHeroLinkRead, status_code=status.HTTP_201_CREATED)
@@ -107,13 +118,22 @@ def delete_mission_hero_link(mission_id: int, hero_id: int, session: SessionDep)
     session.commit()
 
 
-@router.get("", response_model=list[MissionRead])
-def read_missions(session: SessionDep) -> list[Mission]:
-    """查询所有任务，预加载关联英雄。"""
+@router.get("", response_model=PaginatedMissions)
+def read_missions(
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> dict:
+    """分页查询所有任务，返回当前页数据与总条数。"""
+    total = session.exec(select(func.count()).select_from(Mission)).one()
     missions = session.exec(
-        select(Mission).options(selectinload(Mission.heroes)).order_by(Mission.id)
+        select(Mission)
+        .options(selectinload(Mission.heroes))
+        .order_by(Mission.id)
+        .offset(offset)
+        .limit(limit)
     ).all()
-    return missions
+    return {"items": missions, "total": total}
 
 
 @router.get("/{mission_id}", response_model=MissionRead)

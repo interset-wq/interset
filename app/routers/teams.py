@@ -2,27 +2,37 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import Team
-from app.schemas import TeamCreate, TeamRead, TeamUpdate
+from app.schemas import PaginatedTeams, TeamCreate, TeamRead, TeamUpdate
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
-@router.get("", response_model=list[TeamRead])
-def read_teams(session: SessionDep) -> list[Team]:
-    """查询所有团队，预加载成员列表。"""
+@router.get("", response_model=PaginatedTeams)
+def read_teams(
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> dict:
+    """分页查询团队，返回当前页数据与总条数。"""
+    total = session.exec(select(func.count()).select_from(Team)).one()
     teams = session.exec(
-        select(Team).options(selectinload(Team.heroes)).order_by(Team.id)
+        select(Team)
+        .options(selectinload(Team.heroes))
+        .order_by(Team.id)
+        .offset(offset)
+        .limit(limit)
     ).all()
-    return teams
+    return {"items": teams, "total": total}
 
 
 @router.get("/{team_id}", response_model=TeamRead)

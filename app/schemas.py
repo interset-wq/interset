@@ -122,3 +122,24 @@ class MissionHeroLinkUpdate(SQLModel):
     """更新 mission_hero 中间表行的请求体（目前仅 role 可改）。"""
 
     role: Optional[str] = Field(default=None, max_length=80)
+
+
+class PaginatedTeams(SQLModel):
+    """团队分页响应：当前页数据 + 总条数。"""
+
+    items: list[TeamRead]
+    total: int
+
+
+class PaginatedMissions(SQLModel):
+    """任务分页响应：当前页数据 + 总条数。"""
+
+    items: list[MissionRead]
+    total: int
+
+
+class PaginatedMissionHeroLinks(SQLModel):
+    """mission_hero 中间表分页响应：当前页数据 + 总条数。"""
+
+    items: list[MissionHeroLinkRead]
+    total: int
