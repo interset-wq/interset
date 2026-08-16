@@ -1,10 +1,11 @@
 <script setup>
 import { onMounted, ref } from "vue";
 
-// 页面数据：英雄列表、团队列表、后端健康状态
+// 页面数据：英雄列表、团队列表、后端健康状态、SQL 执行日志
 const heroes = ref([]);
 const teams = ref([]);
 const health = ref(null);
+const sqlLogs = ref([]);
 const error = ref("");
 const loading = ref(false);
 
@@ -14,6 +15,12 @@ const form = ref({
   secret_name: "",
   age: null,
   team_id: null,
+});
+
+// 新增团队表单
+const teamForm = ref({
+  name: "",
+  headquarters: "",
 });
 
 // 统一请求封装：前端与后端同源（同一 FastAPI 应用托管），直接调用 /api
@@ -31,9 +38,39 @@ async function api(path, options = {}) {
 }
 
 async function loadAll() {
-  const [hs, ts] = await Promise.all([api("/heroes?limit=100"), api("/teams")]);
+  const [hs, ts, logs] = await Promise.all([
+    api("/heroes?limit=100"),
+    api("/teams"),
+    api("/sql-logs"),
+  ]);
   heroes.value = hs;
   teams.value = ts;
+  sqlLogs.value = logs;
+}
+
+// 新增团队
+async function createTeam() {
+  error.value = "";
+  if (!teamForm.value.name) {
+    error.value = "name 为必填项";
+    return;
+  }
+  loading.value = true;
+  try {
+    await api("/teams", {
+      method: "POST",
+      body: JSON.stringify({
+        name: teamForm.value.name,
+        headquarters: teamForm.value.headquarters || null,
+      }),
+    });
+    teamForm.value = { name: "", headquarters: "" };
+    await loadAll();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    loading.value = false;
+  }
 }
 
 // 新增英雄
@@ -111,13 +148,24 @@ onMounted(async () => {
     </section>
 
     <section class="card">
+      <h2>新增团队</h2>
+      <form @submit.prevent="createTeam">
+        <input v-model="teamForm.name" placeholder="name（必填）" />
+        <input v-model="teamForm.headquarters" placeholder="headquarters" />
+        <button type="submit" :disabled="loading">
+          {{ loading ? "提交中…" : "创建团队" }}
+        </button>
+      </form>
+    </section>
+
+    <section class="card">
       <h2>团队（{{ teams.length }}）</h2>
       <ul v-if="teams.length">
         <li v-for="t in teams" :key="t.id">
           <strong>{{ t.name }}</strong> · {{ t.headquarters }} · {{ t.heroes.length }} 名成员
         </li>
       </ul>
-      <p v-else class="muted">暂无团队（可先通过 API 创建）</p>
+      <p v-else class="muted">暂无团队，先创建一个吧！</p>
     </section>
 
     <section class="card">
@@ -132,6 +180,19 @@ onMounted(async () => {
         </li>
       </ul>
       <p v-else class="muted">暂无英雄，创建第一个吧！</p>
+    </section>
+
+    <section class="card">
+      <h2>SQL 执行日志（最近 {{ sqlLogs.length }} 条）</h2>
+      <p class="muted">每次操作（查询/新增/删除）对应的 SQL 语句，最新的在前。</p>
+      <ul v-if="sqlLogs.length" class="sql-log">
+        <li v-for="(log, i) in sqlLogs" :key="i">
+          <code>{{ log.sql }}</code>
+          <span v-if="log.params" class="muted">{{ log.params }}</span>
+          <span class="log-time">{{ log.time }}</span>
+        </li>
+      </ul>
+      <p v-else class="muted">暂无 SQL 日志</p>
     </section>
   </main>
 </template>
@@ -238,5 +299,21 @@ ul {
 li {
   padding: 6px 0;
   border-bottom: 1px dashed #eef0f4;
+}
+
+.sql-log code {
+  display: block;
+  font-size: 0.85rem;
+  background: #f0f2f7;
+  padding: 6px 8px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
+.sql-log .log-time {
+  float: right;
+  color: #999;
+  font-size: 0.8rem;
+  margin-top: 4px;
 }
 </style>
