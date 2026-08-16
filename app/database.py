@@ -53,21 +53,44 @@ _sql_log_lock = threading.Lock()
 _sql_logs: deque[dict] = deque(maxlen=100)
 
 
+def _inline_params(sql: str, parameters) -> str:
+    """把参数按顺序替换进 SQL 占位符，生成参数内联的完整语句（演示用）。
+
+    兼容 SQLite（?）与 PostgreSQL（%s）占位符；字符串加引号、None 转 NULL。
+    """
+    if not parameters:
+        return sql
+    if isinstance(parameters, dict):
+        params = list(parameters.values())
+    elif isinstance(parameters, (list, tuple)):
+        params = list(parameters)
+    else:
+        params = [parameters]
+    for p in params:
+        if p is None:
+            value = "NULL"
+        elif isinstance(p, (int, float)):
+            value = str(p)
+        else:
+            value = "'" + str(p).replace("'", "''") + "'"
+        if "?" in sql:
+            sql = sql.replace("?", value, 1)
+        elif "%s" in sql:
+            sql = sql.replace("%s", value, 1)
+    return sql
+
+
 def _on_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    """SQLAlchemy 事件：记录每次实际执行的 SQL 语句（含参数），新记录在前。"""
+    """SQLAlchemy 事件：记录实际执行的 SQL，参数内联为完整语句（SQLModel 输出风格），新记录在前。"""
     sql = " ".join(str(statement).split())  # 压缩空白，便于展示
+    sql = _inline_params(sql, parameters)
     if not sql.strip():
         return
-    try:
-        params = repr(tuple(parameters)) if isinstance(parameters, (list, tuple)) else repr(parameters)
-    except Exception:
-        params = ""
     with _sql_log_lock:
         _sql_logs.appendleft(
             {
                 "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "sql": sql,
-                "params": params,
             }
         )
 
