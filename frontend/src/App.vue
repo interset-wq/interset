@@ -34,7 +34,7 @@ async function api(path, options = {}) {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.detail || `请求失败：${res.status}`);
+    throw new Error(body.detail || `Request failed: ${res.status}`);
   }
   if (res.status === 204) return null;
   return res.json();
@@ -61,7 +61,7 @@ function teamName(id) {
 async function createTeam() {
   error.value = "";
   if (!teamForm.value.name) {
-    error.value = "name 为必填项";
+    error.value = "name is required";
     return;
   }
   loading.value = true;
@@ -86,7 +86,7 @@ async function createTeam() {
 async function createHero() {
   error.value = "";
   if (!form.value.name || !form.value.secret_name) {
-    error.value = "name 和 secret_name 为必填项";
+    error.value = "name and secret_name are required";
     return;
   }
   loading.value = true;
@@ -134,9 +134,9 @@ onMounted(async () => {
   <main class="container">
     <h1>⚡ interset</h1>
     <p class="health">
-      后端状态：
+      Backend status:
       <span :class="health ? 'ok' : 'err'">
-        {{ health ? health.status : "离线" }}
+        {{ health ? health.status : "offline" }}
       </span>
     </p>
 
@@ -159,15 +159,15 @@ onMounted(async () => {
     <section v-if="activeTab === 'heroes'" class="card">
       <h2>INSERT INTO hero</h2>
       <form @submit.prevent="createHero">
-        <input v-model="form.name" placeholder="name（必填）" />
-        <input v-model="form.secret_name" placeholder="secret_name（必填）" />
+        <input v-model="form.name" placeholder="name (required)" />
+        <input v-model="form.secret_name" placeholder="secret_name (required)" />
         <input v-model.number="form.age" type="number" placeholder="age" />
         <select v-model="form.team_id">
-          <option :value="null">— 无团队 —</option>
+          <option :value="null">— no team —</option>
           <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
         </select>
         <button type="submit" :disabled="loading">
-          {{ loading ? "提交中…" : "创建" }}
+          {{ loading ? "Submitting…" : "Create" }}
         </button>
       </form>
 
@@ -190,22 +190,22 @@ onMounted(async () => {
               <td>{{ h.secret_name }}</td>
               <td>{{ h.age ?? "NULL" }}</td>
               <td>{{ teamName(h.team_id) }}</td>
-              <td><button class="danger" @click="deleteHero(h.id)">删除</button></td>
+              <td><button class="danger" @click="deleteHero(h.id)">Delete</button></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p v-if="!heroes.length" class="muted">0 rows — 暂无英雄，创建第一个吧！</p>
+      <p v-if="!heroes.length" class="muted">0 rows — no heroes yet, create one!</p>
     </section>
 
     <!-- 团队 Tab：表单 + team 表 -->
     <section v-if="activeTab === 'teams'" class="card">
       <h2>INSERT INTO team</h2>
       <form @submit.prevent="createTeam">
-        <input v-model="teamForm.name" placeholder="name（必填）" />
+        <input v-model="teamForm.name" placeholder="name (required)" />
         <input v-model="teamForm.headquarters" placeholder="headquarters" />
         <button type="submit" :disabled="loading">
-          {{ loading ? "提交中…" : "创建团队" }}
+          {{ loading ? "Submitting…" : "Create team" }}
         </button>
       </form>
 
@@ -234,13 +234,16 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-if="!teams.length" class="muted">0 rows — 暂无团队，先创建一个吧！</p>
+      <p v-if="!teams.length" class="muted">0 rows — no teams yet, create one!</p>
     </section>
 
     <!-- SQL 日志 Tab -->
     <section v-if="activeTab === 'logs'" class="card">
-      <h2>sql_log（最近 {{ sqlLogs.length }} 条，最新在前）</h2>
-      <p class="muted">每次操作（查询 / 新增 / 删除）实际执行的 SQL 语句与参数。</p>
+      <h2>sql_log (recent {{ sqlLogs.length }}, newest first)</h2>
+      <p class="muted">
+        Actual SQL statements and parameters executed for each operation
+        (query / insert / delete).
+      </p>
 
       <div class="table-wrap">
         <table class="cli-table">
@@ -260,7 +263,7 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-if="!sqlLogs.length" class="muted">0 rows — 暂无 SQL 日志</p>
+      <p v-if="!sqlLogs.length" class="muted">0 rows — no SQL logs yet</p>
     </section>
   </main>
 </template>
