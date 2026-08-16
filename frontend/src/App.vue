@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 // ---- 页面状态 ----
 const health = ref(null);
@@ -65,6 +65,17 @@ function pkSet(table) {
   );
 }
 
+// schema 视图：按表分组的表结构（psql \d 风格，每张表一个表格）
+const tableGroups = computed(() =>
+  Object.entries(schema.value).map(([table, columns]) => ({ table, columns }))
+);
+
+// 某张表的主键列（Indexes 行展示）
+function pkColumns(group) {
+  const pks = group.columns.filter((c) => c.primary_key).map((c) => c.column);
+  return pks.length ? pks.join(", ") : "(none)";
+}
+
 // 外键列：hero.team_id / mission_hero.mission_id / mission_hero.hero_id
 const FK_COLUMNS = {
   hero: ["team_id"],
@@ -80,6 +91,12 @@ async function loadTable(name) {
   loading.value = true;
   try {
     await loadSchemaOnce();
+    // schema 视图：只显示表结构，不加载数据行
+    if (name === "schema") {
+      rows.value = [];
+      fkOptions.value = {};
+      return;
+    }
     // 主数据
     if (name === "hero") rows.value = await api("/heroes?limit=100");
     else if (name === "team") rows.value = await api("/teams");
@@ -258,7 +275,7 @@ onMounted(async () => {
 
     <!-- 布局：左侧表列表 + 右侧数据网格 -->
     <div class="editor-layout">
-      <!-- 左侧 sidebar：表列表 -->
+      <!-- 左侧 sidebar：表列表 + schema 视图入口 -->
       <aside class="sidebar">
         <div class="sidebar-title">Tables</div>
         <button
@@ -270,11 +287,55 @@ onMounted(async () => {
         >
           {{ t }}
         </button>
+        <div class="sidebar-sep"></div>
+        <div class="sidebar-title">Views</div>
+        <button
+          class="table-item"
+          :class="{ active: activeTable === 'schema' }"
+          @click="loadTable('schema')"
+        >
+          schema
+        </button>
       </aside>
 
-      <!-- 右侧：数据网格 -->
+      <!-- 右侧：schema 视图 / 数据网格 -->
       <section class="grid-panel">
-        <template v-if="activeTable">
+        <!-- schema 视图：仅显示表结构（psql \d 风格），不加载数据行 -->
+        <template v-if="activeTable === 'schema'">
+          <div class="grid-toolbar">
+            <span class="table-name">schema</span>
+            <span class="col-count">{{ tableGroups.length }} tables</span>
+            <button class="secondary" @click="loadTable('schema')">Refresh</button>
+          </div>
+          <div v-for="group in tableGroups" :key="group.table" class="schema-table">
+            <h3 class="query-sql">Table "{{ group.table }}"</h3>
+            <div class="table-wrap">
+              <table class="cli-table">
+                <thead>
+                  <tr>
+                    <th>Column</th>
+                    <th>Type</th>
+                    <th>Nullable</th>
+                    <th>Default</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="col in group.columns" :key="col.column">
+                    <td>{{ col.column }}</td>
+                    <td>{{ col.type }}</td>
+                    <td>{{ col.nullable ? "" : "not null" }}</td>
+                    <td>{{ col.default ?? "" }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="indexes">Indexes: PRIMARY KEY ({{ pkColumns(group) }})</p>
+          </div>
+          <p v-if="!tableGroups.length" class="muted">0 tables</p>
+        </template>
+
+        <!-- 数据表视图 -->
+        <template v-else-if="activeTable">
           <div class="grid-toolbar">
             <span class="table-name">{{ activeTable }}</span>
             <span class="col-count">{{ currentColumns().length }} columns</span>
@@ -459,6 +520,11 @@ h1 {
   border: 1px solid #d5d8e0;
   border-radius: 8px;
   padding: 8px;
+}
+
+.sidebar-sep {
+  border-top: 1px solid #e2e5ec;
+  margin: 8px 2px;
 }
 
 .sidebar-title {
@@ -685,6 +751,28 @@ button.small {
   margin-top: 0;
   font-size: 1rem;
   color: #555;
+}
+
+/* ---- schema 视图（psql \d 风格）---- */
+.schema-table {
+  margin-bottom: 18px;
+}
+
+.query-sql {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2c6fbb;
+  background: #eef4fc;
+  border-left: 3px solid #2c6fbb;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+.schema-table .indexes {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: #7f8c8d;
 }
 
 .cli-table {
