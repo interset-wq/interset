@@ -44,7 +44,7 @@ async function loadAll() {
   const [hs, ts, logs] = await Promise.all([
     api("/heroes?limit=100"),
     api("/teams"),
-    api("/sql-logs"),
+    api("/sql-logs?limit=5"),
   ]);
   heroes.value = hs;
   teams.value = ts;
@@ -150,9 +150,6 @@ onMounted(async () => {
       <button :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
         team（{{ teams.length }}）
       </button>
-      <button :class="{ active: activeTab === 'logs' }" @click="activeTab = 'logs'">
-        sql_log（{{ sqlLogs.length }}）
-      </button>
     </nav>
 
     <!-- 英雄 Tab：表单 + hero 表 -->
@@ -237,12 +234,12 @@ onMounted(async () => {
       <p v-if="!teams.length" class="muted">0 rows — no teams yet, create one!</p>
     </section>
 
-    <!-- SQL 日志 Tab -->
-    <section v-if="activeTab === 'logs'" class="card">
-      <h2>sql_log (recent {{ sqlLogs.length }}, newest first)</h2>
+    <!-- SQL 日志：content 区域下方独立 section，始终显示 -->
+    <section class="card">
+      <h2>SQL Log (recent {{ sqlLogs.length }}, newest first)</h2>
       <p class="muted">
-        Actual SQL statements and parameters executed for each operation
-        (query / insert / delete).
+        Actual SQL statements executed by SQLModel for each operation
+        (query / insert / delete), parameters inlined.
       </p>
 
       <div class="table-wrap">
@@ -251,14 +248,12 @@ onMounted(async () => {
             <tr>
               <th>time</th>
               <th>sql</th>
-              <th>params</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="(log, i) in sqlLogs" :key="i">
               <td class="log-time">{{ log.time }}</td>
               <td><code>{{ log.sql }}</code></td>
-              <td class="log-params">{{ log.params }}</td>
             </tr>
           </tbody>
         </table>
