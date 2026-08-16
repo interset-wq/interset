@@ -1,0 +1,46 @@
+# AGENTS.md
+
+## 项目概述
+一个前后端分离的 FastAPI 演示项目：FastAPI + SQLModel 提供后端 API，前端为独立构建的静态资源（`dist/` 目录），由 FastAPI 统一托管服务。演示了 FastAPI 特性（APIRouter、Annotated 依赖注入、响应模型、lifespan）与 SQLModel 特性（表模型、一对多关系、session.exec 查询）。
+
+## 强制约定
+- **必须使用 fastapi skill**：所有 FastAPI 相关开发工作，必须先加载 `fastapi` skill 并遵循其最佳实践与最新模式
+- **必须参考 FastAPI Cloud 官方文档**：https://fastapicloud.com/docs/
+- **前端处理方式**：采用 https://fastapicloud.com/docs/builds-and-deployments/frontend/ 的方式（前后端分离，前端构建产物由 FastAPI 托管）
+
+## 技术栈
+- Python >= 3.14（`.python-version` 固定为 3.14）
+- FastAPI（`fastapi[standard]`，含 uvicorn）
+- SQLModel（SQLAlchemy + Pydantic）；数据库：SQLite（开发默认，`database.db`）/ PostgreSQL（生产，支持 Neon 云数据库，psycopg 驱动）
+- 依赖管理：uv（`pyproject.toml` + `uv.lock`），已废弃 `requirements.txt`
+- 前端：Vue 3 + Vite（pnpm 管理），构建产物为 `dist/`
+
+## 前端（前后端分离，按 FastAPI Cloud 前端部署文档）
+- 前端使用 Vue 3 + Vite 构建，产物为静态文件目录 `dist/`
+- FastAPI 通过 `app.frontend("/", directory="dist")` 托管前端静态文件（低优先级路由，API 优先匹配，SPA 客户端路由回退到 index.html），API 路由保持正常
+- 部署前必须在本地先执行前端构建命令（`pnpm build`），FastAPI Cloud 不会自动运行前端构建
+- `dist/` 加入 `.gitignore`（构建产物不入库）；在 `.fastapicloudignore` 中用 `!dist/` 取消忽略，确保部署时上传构建产物
+
+## 常用命令
+- 启动服务：`uv run python main.py`（监听 0.0.0.0:8000）
+- 或：`uv run uvicorn app.main:app --reload`
+- 安装依赖：`uv sync`
+- 前端开发：`cd frontend && pnpm dev`（Vite 将 `/api` 代理到 8000 端口）
+- 前端构建：`cd frontend && pnpm build`（输出到项目根 `dist/`）
+- 部署：先构建前端，再执行 `uv run fastapi deploy`
+
+## 代码结构
+- `main.py` — 本地启动入口（uvicorn.run app.main:app）
+- `app/main.py` — FastAPI 应用组装：lifespan 启动建表、挂载路由（/api 前缀）、`app.frontend` 托管前端、健康检查 `GET /api/health`
+- `app/database.py` — 数据库引擎（`DATABASE_URL` 环境变量切换 SQLite / Postgres(Neon)，Neon 需 `pool_pre_ping`；部署时由 FastAPI Cloud 内置 Neon 集成自动注入该变量）、`create_db_and_tables`、`get_session` yield 依赖
+- `app/models.py` — SQLModel 表模型：`Team`（团队）与 `Hero`（英雄），一对多 `Relationship`
+- `app/schemas.py` — 请求/响应模型：`HeroCreate/HeroRead/HeroUpdate/TeamCreate/TeamRead`
+- `app/routers/heroes.py` — 英雄 CRUD（分页、部分更新、404 处理）
+- `app/routers/teams.py` — 团队查询（selectinload 预加载成员）
+- `frontend/` — Vue 3 + Vite 前端源码；`dist/` — 构建产物
+
+## 约定
+- 源码注释使用中文
+- 参数与依赖使用 `Annotated` 风格（`SessionDep = Annotated[Session, Depends(get_session)]`）
+- 表模型与读写模型分离（models.py / schemas.py）
+- 同步路由使用普通 `def`（SQLModel 为阻塞式 I/O，由 FastAPI 线程池执行）
