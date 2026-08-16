@@ -46,6 +46,13 @@ class JoinedHeroRead(SQLModel):
     team_name: Optional[str] = None
 
 
+class PaginatedHeroes(SQLModel):
+    """英雄分页响应：当前页数据 + 总条数。"""
+
+    items: list[HeroRead]
+    total: int
+
+
 class TeamBase(SQLModel):
     """Team 公共字段。"""
 

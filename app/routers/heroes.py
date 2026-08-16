@@ -3,11 +3,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import Hero, Team
-from app.schemas import HeroCreate, HeroRead, HeroUpdate, JoinedHeroRead
+from app.schemas import HeroCreate, HeroRead, HeroUpdate, JoinedHeroRead, PaginatedHeroes
 
 router = APIRouter(prefix="/heroes", tags=["heroes"])
 
@@ -15,17 +16,18 @@ router = APIRouter(prefix="/heroes", tags=["heroes"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
-@router.get("", response_model=list[HeroRead])
+@router.get("", response_model=PaginatedHeroes)
 def read_heroes(
     session: SessionDep,
     offset: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = 10,
-) -> list[Hero]:
-    """分页查询英雄列表。"""
+) -> dict:
+    """分页查询英雄列表，返回当前页数据与总条数。"""
+    total = session.exec(select(func.count()).select_from(Hero)).one()
     heroes = session.exec(
         select(Hero).order_by(Hero.id).offset(offset).limit(limit)
     ).all()
-    return heroes
+    return {"items": heroes, "total": total}
 
 
 @router.get("/joined", response_model=list[JoinedHeroRead])
