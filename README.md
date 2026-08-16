@@ -48,14 +48,35 @@ uv run python main.py
 
 ## 部署（FastAPI Cloud，前后端分离方案）
 
-按官方文档 [Deploy a Full-Stack App](https://fastapicloud.com/docs/builds-and-deployments/frontend/) 处理：
+按官方文档 [Deploy a Full-Stack App](https://fastapicloud.com/docs/builds-and-deployments/frontend/) 处理。
 
-1. **本地先构建前端**：`cd frontend && pnpm build`（FastAPI Cloud 不会自动运行前端构建）
-2. 确认 `dist/` 存在；它被 `.gitignore` 忽略，但 `.fastapicloudignore` 中的 `!dist/` 会确保部署时上传
-3. **连接 Neon 数据库**（可选）：在 FastAPI Cloud 的 Integrations 中连接 Neon 账户并选择数据库，平台会自动创建 `DATABASE_URL` 环境变量（以加密 secret 存储），应用启动时读取该变量连接 PostgreSQL；未连接则使用本地 SQLite
-4. 部署：`uv run fastapi deploy`
+### 方式一：CI 自动部署（推荐，已配置 workflow）
 
-CI 部署时同样需要在 workflow 中先执行 `pnpm install && pnpm build`，再运行 `uv run fastapi deploy`。
+仓库已含 `.github/workflows/deploy.yml`：push 到 `main` 时自动构建前端并部署到 FastAPI Cloud。
+
+需要在 GitHub 仓库配置两个 secrets（参见 [Deploy Tokens](https://fastapicloud.com/docs/advanced-features/deploy-tokens)）：
+
+| Secret | 说明 |
+|--------|------|
+| `FASTAPI_CLOUD_TOKEN` | FastAPI Cloud 部署令牌 |
+| `FASTAPI_CLOUD_APP_ID` | FastAPI Cloud 应用 ID |
+
+workflow 流程：`pnpm install --frozen-lockfile && pnpm build`（生成 `dist/`）→ `uv run fastapi deploy`。
+
+### 方式二：本地部署
+
+```bash
+# 1. 本地先构建前端（FastAPI Cloud 不会自动运行前端构建）
+cd frontend && pnpm build && cd ..
+
+# 2. 部署
+uv run fastapi deploy
+```
+
+### 部署要点
+
+- `dist/` 被 `.gitignore` 忽略（构建产物不入库），但 `.fastapicloudignore` 中的 `!dist/` 会确保部署时上传
+- **连接 Neon 数据库**（可选）：在 FastAPI Cloud 的 Integrations 中连接 Neon 账户并选择数据库，平台会自动创建 `DATABASE_URL` 环境变量（以加密 secret 存储），应用启动时读取该变量连接 PostgreSQL；未连接则使用本地 SQLite
 
 ## 项目结构
 
