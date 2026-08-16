@@ -1,0 +1,4 @@
+# pnpm 11 依赖构建脚本白名单（esbuild 的 postinstall 需要运行）
+# 注意：pnpm 11 已用 allowBuilds 取代旧的 onlyBuiltDependencies
+allowBuilds:
+  esbuild: true
