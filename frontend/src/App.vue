@@ -84,10 +84,19 @@ const FK_COLUMNS = {
   team: [],
 };
 
+// 分页状态（hero 表使用后端分页）
+const page = ref(1);
+const pageSize = ref(10);
+const total = ref(0);
+
+// 总页数
+const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)));
+
 // ---- 加载指定表的数据 ----
-async function loadTable(name) {
+async function loadTable(name, resetPage = true) {
   error.value = "";
   activeTable.value = name;
+  if (resetPage) page.value = 1;
   loading.value = true;
   try {
     await loadSchemaOnce();
@@ -97,9 +106,14 @@ async function loadTable(name) {
       fkOptions.value = {};
       return;
     }
-    // 主数据
-    if (name === "hero") rows.value = await api("/heroes?limit=100");
-    else if (name === "team") rows.value = await api("/teams");
+    // 主数据（hero 走后端分页，其余表数据量小直接全量）
+    if (name === "hero") {
+      const data = await api(
+        `/heroes?offset=${(page.value - 1) * pageSize.value}&limit=${pageSize.value}`
+      );
+      rows.value = data.items;
+      total.value = data.total;
+    } else if (name === "team") rows.value = await api("/teams");
     else if (name === "mission") rows.value = await api("/missions");
     else if (name === "mission_hero") rows.value = await api("/missions/links");
     // 外键选项（并行加载关联表）
@@ -107,7 +121,7 @@ async function loadTable(name) {
     const tasks = [];
     if (fks.includes("team_id")) tasks.push(api("/teams").then((d) => (fkOptions.value.team_id = d.map((t) => ({ id: t.id, label: t.name })))));
     if (fks.includes("mission_id")) tasks.push(api("/missions").then((d) => (fkOptions.value.mission_id = d.map((m) => ({ id: m.id, label: m.name })))));
-    if (fks.includes("hero_id")) tasks.push(api("/heroes?limit=100").then((d) => (fkOptions.value.hero_id = d.map((h) => ({ id: h.id, label: h.name })))));
+    if (fks.includes("hero_id")) tasks.push(api("/heroes?limit=100").then((d) => (fkOptions.value.hero_id = d.items.map((h) => ({ id: h.id, label: h.name })))));
     await Promise.all(tasks);
     await loadSqlLogs();
   } catch (e) {
@@ -115,6 +129,13 @@ async function loadTable(name) {
   } finally {
     loading.value = false;
   }
+}
+
+// 翻页（保留当前表与页码，不重置）
+async function goToPage(p) {
+  if (p < 1 || p > totalPages.value) return;
+  page.value = p;
+  await loadTable(activeTable.value, false);
 }
 
 // ---- 单元格展示值 ----
@@ -419,6 +440,37 @@ onMounted(async () => {
               </tbody>
             </table>
           </div>
+
+          <!-- 分页控件（hero 表使用后端分页） -->
+          <div v-if="activeTable === 'hero'" class="pagination">
+            <button
+              class="secondary small"
+              :disabled="page <= 1"
+              @click="goToPage(page - 1)"
+            >
+              ← Prev
+            </button>
+            <span class="page-info">
+              Page {{ page }} / {{ totalPages }}（{{ total }} rows）
+            </span>
+            <button
+              class="secondary small"
+              :disabled="page >= totalPages"
+              @click="goToPage(page + 1)"
+            >
+              Next →
+            </button>
+            <select
+              v-model.number="pageSize"
+              class="page-size"
+              @change="loadTable(activeTable, false)"
+            >
+              <option :value="10">10 / page</option>
+              <option :value="20">20 / page</option>
+              <option :value="50">50 / page</option>
+            </select>
+          </div>
+
           <p v-if="!rows.length" class="muted">0 rows</p>
         </template>
 
@@ -685,6 +737,28 @@ h1 {
   color: #999;
   text-align: center;
   padding: 40px 0;
+}
+
+/* ---- 分页控件 ---- */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.page-info {
+  font-size: 0.85rem;
+  color: #555;
+}
+
+.page-size {
+  padding: 5px 8px;
+  border: 1px solid #d5d8e0;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.85rem;
 }
 
 /* ---- 按钮 ---- */
