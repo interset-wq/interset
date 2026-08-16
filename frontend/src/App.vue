@@ -11,6 +11,7 @@ import TableSidebar from "./components/TableSidebar.vue";
 const {
   health,
   error,
+  warning,
   loading,
   sqlLogs,
   activeTable,
@@ -53,6 +54,7 @@ function currentFkColumns() {
     </p>
 
     <p v-if="error" class="err">{{ error }}</p>
+    <p v-if="warning" class="warn">{{ warning }}</p>
 
     <!-- 布局：左侧表列表 + 右侧数据网格 / schema 视图 -->
     <div class="editor-layout">
@@ -162,6 +164,15 @@ h1 {
 .err {
   color: #e74c3c;
   font-weight: 600;
+}
+
+.warn {
+  color: #d68910;
+  font-weight: 600;
+  background: #fdf3e7;
+  border: 1px solid #f5cba7;
+  border-radius: 6px;
+  padding: 8px 12px;
 }
 
 .muted {

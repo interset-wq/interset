@@ -17,6 +17,7 @@ export function useTableData() {
   // ---- 页面状态 ----
   const health = ref(null);
   const error = ref("");
+  const warning = ref("");
   const loading = ref(false);
   const sqlLogs = ref([]);
 
@@ -105,9 +106,17 @@ export function useTableData() {
       } else if (name === "mission_hero") {
         data = await api(`/missions/links?offset=${offset}&limit=${limit}`);
       }
-      // 兼容新旧后端：{items,total} 或纯数组，避免 rows 为 undefined 导致模板崩溃
-      rows.value = Array.isArray(data) ? data : data?.items ?? [];
-      total.value = Array.isArray(data) ? data.length : data?.total ?? 0;
+      // 兼容新旧后端：{items,total} 或纯数组；纯数组说明后端过旧，无法分页
+      if (Array.isArray(data)) {
+        rows.value = data;
+        total.value = data.length;
+        warning.value =
+          "Backend returned legacy array format — pagination unavailable. Please restart the backend (uv run python main.py).";
+      } else {
+        rows.value = data?.items ?? [];
+        total.value = data?.total ?? 0;
+        warning.value = "";
+      }
       // 外键选项（并行加载关联表，兼容 {items,total} 或纯数组）
       const fks = FK_COLUMNS[name] || [];
       const tasks = [];
@@ -325,6 +334,7 @@ export function useTableData() {
   return {
     health,
     error,
+    warning,
     loading,
     sqlLogs,
     activeTable,
