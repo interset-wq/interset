@@ -71,3 +71,33 @@ class TeamRead(TeamBase):
 
     id: int
     heroes: list[HeroRead] = []
+
+
+class MissionBase(SQLModel):
+    """Mission 公共字段。"""
+
+    name: str = Field(min_length=1, max_length=80)
+    location: Optional[str] = Field(default=None, max_length=200)
+
+
+class MissionCreate(MissionBase):
+    """创建任务的请求体，可附带关联英雄 id 列表（写入 M2M 中间表）。"""
+
+    hero_ids: list[int] = []
+
+
+class MissionRead(MissionBase):
+    """任务响应体，包含关联英雄列表（体现 M2M 中间表查询）。"""
+
+    id: int
+    heroes: list[HeroRead] = []
+
+
+class MissionHeroLinkRead(SQLModel):
+    """mission_hero 中间表的读模型（DB 实际行，附关联名称便于展示）。"""
+
+    mission_id: int
+    hero_id: int
+    role: Optional[str] = None
+    mission_name: Optional[str] = None
+    hero_name: Optional[str] = None

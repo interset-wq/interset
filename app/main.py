@@ -7,7 +7,7 @@ from fastapi import FastAPI, Query
 from sqlalchemy import inspect
 
 from app.database import create_db_and_tables, engine, get_sql_logs
-from app.routers import heroes, teams
+from app.routers import heroes, missions, teams
 
 
 @asynccontextmanager
@@ -64,6 +64,7 @@ def tables() -> list[dict]:
 # 挂载业务路由（统一 /api 前缀）
 app.include_router(heroes.router, prefix="/api")
 app.include_router(teams.router, prefix="/api")
+app.include_router(missions.router, prefix="/api")
 
 # 托管前端构建产物（低优先级路由：API 优先匹配，SPA 客户端路由回退到 index.html）
 # 按 FastAPI Cloud 前端部署文档：部署前须本地先构建前端（pnpm build），
