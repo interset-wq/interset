@@ -645,10 +645,9 @@ h1 {
 }
 
 .col-header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  /* 保持 th 默认的 table-cell 布局（display:flex 会让表头脱离表格单元格） */
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .cell {
