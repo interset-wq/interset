@@ -372,10 +372,7 @@ onMounted(async () => {
               <thead>
                 <tr>
                   <th v-for="c in currentColumns()" :key="c.column" class="col-header">
-                    <span class="col-name">
-                      {{ c.column }}<span v-if="c.primary_key" class="pk">🔑</span>
-                    </span>
-                    <span class="col-type">{{ c.type }}</span>
+                    {{ c.column }}
                   </th>
                   <th class="col-actions"></th>
                 </tr>
@@ -651,20 +648,7 @@ h1 {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.col-name {
   font-weight: 700;
-}
-
-.col-type {
-  font-size: 0.72rem;
-  color: #999;
-  font-weight: 400;
-}
-
-.pk {
-  font-size: 0.75rem;
 }
 
 .cell {
