@@ -1,3 +1,5 @@
 # FastAPI Cloud 部署时取消忽略前端构建产物
 # dist/ 在 .gitignore 中被忽略（不入库），但部署时需要上传
+# 注意：gitignore 语义下 !dist/ 只能取消目录本身，!dist/** 才能包含目录内文件
 !dist/
+!dist/**
