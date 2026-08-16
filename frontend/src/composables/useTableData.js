@@ -332,7 +332,6 @@ export function useTableData() {
     rows,
     fkOptions,
     editingCell,
-    editValue,
     insertMode,
     insertForm,
     page,
