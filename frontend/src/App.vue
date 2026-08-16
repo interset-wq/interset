@@ -171,11 +171,11 @@ onMounted(async () => {
     <section v-if="activeTab === 'heroes'" class="card">
       <h2>INSERT INTO hero</h2>
       <form @submit.prevent="createHero">
-        <input v-model="form.name" placeholder="name (required)" />
-        <input v-model="form.secret_name" placeholder="secret_name (required)" />
-        <input v-model.number="form.age" type="number" placeholder="age" />
+        <input v-model="form.name" placeholder="Hero name (required)" />
+        <input v-model="form.secret_name" placeholder="Secret identity (required)" />
+        <input v-model.number="form.age" type="number" placeholder="Age" />
         <select v-model="form.team_id">
-          <option :value="null">— no team —</option>
+          <option :value="null">— No team —</option>
           <option v-for="t in teams" :key="t.id" :value="t.id">{{ t.name }}</option>
         </select>
         <button type="submit" :disabled="loading">
@@ -214,8 +214,8 @@ onMounted(async () => {
     <section v-if="activeTab === 'teams'" class="card">
       <h2>INSERT INTO team</h2>
       <form @submit.prevent="createTeam">
-        <input v-model="teamForm.name" placeholder="name (required)" />
-        <input v-model="teamForm.headquarters" placeholder="headquarters" />
+        <input v-model="teamForm.name" placeholder="Team name (required)" />
+        <input v-model="teamForm.headquarters" placeholder="Headquarters" />
         <button type="submit" :disabled="loading">
           {{ loading ? "Submitting…" : "Create team" }}
         </button>
@@ -463,6 +463,8 @@ button.danger {
 }
 
 .cli-table code {
+  /* 继承 .cli-table 的等宽字体栈，避免浏览器默认 code 字体不一致 */
+  font-family: inherit;
   font-size: 0.82rem;
   word-break: break-all;
 }
