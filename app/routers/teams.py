@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import Team
-from app.schemas import TeamCreate, TeamRead
+from app.schemas import TeamCreate, TeamRead, TeamUpdate
 
 router = APIRouter(prefix="/teams", tags=["teams"])
 
@@ -52,3 +52,37 @@ def create_team(team: TeamCreate, session: SessionDep) -> Team:
         )
     session.refresh(db_team)
     return db_team
+
+
+@router.patch("/{team_id}", response_model=TeamRead)
+def update_team(team_id: int, team: TeamUpdate, session: SessionDep) -> Team:
+    """部分更新团队（PATCH）。"""
+    db_team = session.get(Team, team_id)
+    if not db_team:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+        )
+    team_data = team.model_dump(exclude_unset=True)
+    db_team.sqlmodel_update(team_data)
+    session.add(db_team)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Team name already exists"
+        )
+    session.refresh(db_team)
+    return db_team
+
+
+@router.delete("/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_team(team_id: int, session: SessionDep) -> None:
+    """删除团队（其成员 hero.team_id 置为 NULL，由外键 ON DELETE SET NULL 保证）。"""
+    db_team = session.get(Team, team_id)
+    if not db_team:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+        )
+    session.delete(db_team)
+    session.commit()

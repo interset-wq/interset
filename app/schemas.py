@@ -48,6 +48,13 @@ class TeamCreate(TeamBase):
     pass
 
 
+class TeamUpdate(SQLModel):
+    """更新团队的请求体，所有字段可选（部分更新）。"""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    headquarters: Optional[str] = Field(default=None, min_length=1, max_length=200)
+
+
 class TeamRead(TeamBase):
     """团队响应体，包含团队成员列表（体现 Relationship 查询）。"""
 
