@@ -1,0 +1,47 @@
+"""团队路由：演示 SQLModel Relationship 关联查询（selectinload 预加载避免 N+1）。"""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, select
+
+from app.database import get_session
+from app.models import Team
+from app.schemas import TeamCreate, TeamRead
+
+router = APIRouter(prefix="/teams", tags=["teams"])
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("", response_model=list[TeamRead])
+def read_teams(session: SessionDep) -> list[Team]:
+    """查询所有团队，预加载成员列表。"""
+    teams = session.exec(
+        select(Team).options(selectinload(Team.heroes)).order_by(Team.id)
+    ).all()
+    return teams
+
+
+@router.get("/{team_id}", response_model=TeamRead)
+def read_team(team_id: int, session: SessionDep) -> Team:
+    """按 id 查询团队及其成员。"""
+    team = session.exec(
+        select(Team).where(Team.id == team_id).options(selectinload(Team.heroes))
+    ).first()
+    if not team:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+        )
+    return team
+
+
+@router.post("", response_model=TeamRead, status_code=status.HTTP_201_CREATED)
+def create_team(team: TeamCreate, session: SessionDep) -> Team:
+    """创建团队。"""
+    db_team = Team.model_validate(team)
+    session.add(db_team)
+    session.commit()
+    session.refresh(db_team)
+    return db_team

@@ -1,0 +1,77 @@
+"""英雄 CRUD 路由：演示 FastAPI 特性（依赖注入、分页、状态码、响应模型）与 SQLModel 查询。"""
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlmodel import Session, select
+
+from app.database import get_session
+from app.models import Hero
+from app.schemas import HeroCreate, HeroRead, HeroUpdate
+
+router = APIRouter(prefix="/heroes", tags=["heroes"])
+
+# 可复用的会话依赖类型别名（Annotated + Depends 推荐写法）
+SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("", response_model=list[HeroRead])
+def read_heroes(
+    session: SessionDep,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> list[Hero]:
+    """分页查询英雄列表。"""
+    heroes = session.exec(
+        select(Hero).order_by(Hero.id).offset(offset).limit(limit)
+    ).all()
+    return heroes
+
+
+@router.get("/{hero_id}", response_model=HeroRead)
+def read_hero(hero_id: int, session: SessionDep) -> Hero:
+    """按 id 查询单个英雄。"""
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Hero not found"
+        )
+    return hero
+
+
+@router.post("", response_model=HeroRead, status_code=status.HTTP_201_CREATED)
+def create_hero(hero: HeroCreate, session: SessionDep) -> Hero:
+    """创建英雄。"""
+    db_hero = Hero.model_validate(hero)
+    session.add(db_hero)
+    session.commit()
+    session.refresh(db_hero)
+    return db_hero
+
+
+@router.patch("/{hero_id}", response_model=HeroRead)
+def update_hero(hero_id: int, hero: HeroUpdate, session: SessionDep) -> Hero:
+    """部分更新英雄（PATCH）。"""
+    db_hero = session.get(Hero, hero_id)
+    if not db_hero:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Hero not found"
+        )
+    hero_data = hero.model_dump(exclude_unset=True)
+    db_hero.sqlmodel_update(hero_data)
+    session.add(db_hero)
+    session.commit()
+    session.refresh(db_hero)
+    return db_hero
+
+
+@router.delete("/{hero_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_hero(hero_id: int, session: SessionDep) -> None:
+    """删除英雄。"""
+    db_hero = session.get(Hero, hero_id)
+    if not db_hero:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Hero not found"
+        )
+    session.delete(db_hero)
+    session.commit()
