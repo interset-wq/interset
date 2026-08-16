@@ -50,21 +50,90 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-async function loadAll() {
-  const [hs, ts, mss, links, logs, tbs] = await Promise.all([
-    api("/heroes?limit=100"),
-    api("/teams"),
-    api("/missions"),
-    api("/missions/links"),
-    api("/sql-logs?limit=5"),
-    api("/tables"),
-  ]);
-  heroes.value = hs;
-  teams.value = ts;
-  missions.value = mss;
-  missionLinks.value = links;
-  sqlLogs.value = logs;
-  tables.value = tbs;
+// ---- 按表拆分的数据加载（filter 风格：初始不查询，勾选才查）----
+async function loadHeroes() {
+  heroes.value = await api("/heroes?limit=100");
+}
+async function loadTeams() {
+  teams.value = await api("/teams");
+}
+async function loadMissions() {
+  missions.value = await api("/missions");
+}
+async function loadMissionLinks() {
+  missionLinks.value = await api("/missions/links");
+}
+async function loadSqlLogs() {
+  sqlLogs.value = await api("/sql-logs?limit=5");
+}
+async function loadTables() {
+  tables.value = await api("/tables");
+}
+
+// 勾选状态：初始全部未勾选，即不查询任何表
+const checkedTables = ref({
+  hero: false,
+  team: false,
+  mission: false,
+  mission_hero: false,
+  schema: false,
+});
+
+// 表 → 加载器 映射
+const tableLoaders = {
+  hero: loadHeroes,
+  team: loadTeams,
+  mission: loadMissions,
+  mission_hero: loadMissionLinks,
+  schema: loadTables,
+};
+
+// 表 → 数据容器 映射（用于取消勾选时清空）
+const tableData = {
+  hero: heroes,
+  team: teams,
+  mission: missions,
+  mission_hero: missionLinks,
+  schema: tables,
+};
+
+// 勾选/取消勾选某个表：勾选即查询该表，取消即清空
+async function toggleTable(key) {
+  error.value = "";
+  checkedTables.value[key] = !checkedTables.value[key];
+  if (checkedTables.value[key]) {
+    try {
+      await tableLoaders[key]();
+      await loadSqlLogs();
+    } catch (e) {
+      error.value = e.message;
+    }
+  } else {
+    tableData[key].value = [];
+  }
+}
+
+// SELECT ALL：勾选所有表并全部查询
+async function selectAll() {
+  error.value = "";
+  const keys = Object.keys(checkedTables.value);
+  for (const k of keys) checkedTables.value[k] = true;
+  try {
+    await Promise.all(keys.map((k) => tableLoaders[k]()));
+    await loadSqlLogs();
+  } catch (e) {
+    error.value = e.message;
+  }
+}
+
+// 写操作后刷新：只刷新已勾选的表，并总是刷新 SQL 日志
+async function refreshChecked() {
+  const tasks = [];
+  for (const [key, on] of Object.entries(checkedTables.value)) {
+    if (on) tasks.push(tableLoaders[key]());
+  }
+  tasks.push(loadSqlLogs());
+  await Promise.all(tasks);
 }
 
 // 英雄表格里显示团队名（id → name），无团队显示 NULL
@@ -106,7 +175,7 @@ async function createTeam() {
       }),
     });
     teamForm.value = { name: "", headquarters: "" };
-    await loadAll();
+    await refreshChecked();
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -132,7 +201,7 @@ async function createMission() {
       }),
     });
     missionForm.value = { name: "", location: "", hero_ids: [] };
-    await loadAll();
+    await refreshChecked();
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -159,7 +228,7 @@ async function createHero() {
       }),
     });
     form.value = { name: "", secret_name: "", age: null, team_id: null };
-    await loadAll();
+    await refreshChecked();
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -172,7 +241,7 @@ async function deleteHero(id) {
   error.value = "";
   try {
     await api(`/heroes/${id}`, { method: "DELETE" });
-    await loadAll();
+    await refreshChecked();
   } catch (e) {
     error.value = e.message;
   }
@@ -221,7 +290,7 @@ async function saveHero(id) {
       }),
     });
     editingHeroId.value = null;
-    await loadAll();
+    await refreshChecked();
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -268,7 +337,7 @@ async function saveTeam(id) {
       }),
     });
     editingTeamId.value = null;
-    await loadAll();
+    await refreshChecked();
   } catch (e) {
     error.value = e.message;
   } finally {
@@ -281,16 +350,16 @@ async function deleteTeam(id) {
   error.value = "";
   try {
     await api(`/teams/${id}`, { method: "DELETE" });
-    await loadAll();
+    await refreshChecked();
   } catch (e) {
     error.value = e.message;
   }
 }
 
+// 初始只检查后端健康状态，不查询任何表（filter 风格：用户勾选后才查询）
 onMounted(async () => {
   try {
     health.value = await api("/health");
-    await loadAll();
   } catch (e) {
     error.value = e.message;
   }
@@ -308,6 +377,20 @@ onMounted(async () => {
     </p>
 
     <p v-if="error" class="err">{{ error }}</p>
+
+    <!-- filter 栏：勾选要查询的表，初始不查询任何表 -->
+    <div class="filter-bar">
+      <span class="filter-label">Query tables:</span>
+      <label v-for="key in Object.keys(checkedTables)" :key="key" class="filter-item">
+        <input
+          type="checkbox"
+          :checked="checkedTables[key]"
+          @change="toggleTable(key)"
+        />
+        {{ key }}
+      </label>
+      <button class="secondary" @click="selectAll">SELECT ALL</button>
+    </div>
 
     <!-- Tab 导航 -->
     <nav class="tabs">
@@ -401,7 +484,8 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-if="!heroes.length" class="muted">0 rows — no heroes yet, create one!</p>
+      <p v-if="!checkedTables.hero" class="muted">Not loaded — check "hero" to query.</p>
+      <p v-else-if="!heroes.length" class="muted">0 rows — no heroes yet, create one!</p>
     </section>
 
     <!-- 团队 Tab：表单 + team 表 -->
@@ -471,7 +555,8 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-if="!teams.length" class="muted">0 rows — no teams yet, create one!</p>
+      <p v-if="!checkedTables.team" class="muted">Not loaded — check "team" to query.</p>
+      <p v-else-if="!teams.length" class="muted">0 rows — no teams yet, create one!</p>
     </section>
 
     <!-- 任务 Tab：表单 + mission 表（M2M，hero_ids 关联英雄） -->
@@ -517,7 +602,8 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-if="!missions.length" class="muted">0 rows — no missions yet, create one!</p>
+      <p v-if="!checkedTables.mission" class="muted">Not loaded — check "mission" to query.</p>
+      <p v-else-if="!missions.length" class="muted">0 rows — no missions yet, create one!</p>
     </section>
 
     <!-- 中间表 Tab：mission_hero 的 DB 实际行 -->
@@ -549,7 +635,10 @@ onMounted(async () => {
           </tbody>
         </table>
       </div>
-      <p v-if="!missionLinks.length" class="muted">
+      <p v-if="!checkedTables.mission_hero" class="muted">
+        Not loaded — check "mission_hero" to query.
+      </p>
+      <p v-else-if="!missionLinks.length" class="muted">
         0 rows — no links yet, create a mission with heroes
       </p>
     </section>
@@ -583,7 +672,8 @@ onMounted(async () => {
         <p class="indexes">Indexes: PRIMARY KEY ({{ pkColumns(group) }})</p>
       </div>
 
-      <p v-if="!tableGroups.length" class="muted">0 rows — no tables found</p>
+      <p v-if="!checkedTables.schema" class="muted">Not loaded — check "schema" to query.</p>
+      <p v-else-if="!tableGroups.length" class="muted">0 rows — no tables found</p>
     </section>
 
     <!-- SQL 日志：content 区域下方独立 section，始终显示 -->
@@ -658,6 +748,37 @@ h1 {
 
 .muted {
   color: #999;
+}
+
+/* ---- filter 栏（勾选要查询的表）---- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #d5d8e0;
+  border-radius: 8px;
+  margin: 12px 0;
+  font-size: 0.85rem;
+}
+
+.filter-label {
+  font-weight: 600;
+  color: #555;
+}
+
+.filter-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.filter-item input {
+  margin: 0;
 }
 
 /* ---- Tab 导航 ---- */
