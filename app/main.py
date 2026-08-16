@@ -1,10 +1,11 @@
 """FastAPI 应用组装：lifespan 建表、挂载路由、前端托管。"""
 
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 
-from app.database import create_db_and_tables
+from app.database import create_db_and_tables, get_sql_logs
 from app.routers import heroes, teams
 
 
@@ -27,6 +28,14 @@ app = FastAPI(
 def health() -> dict[str, str]:
     """健康检查接口。"""
     return {"status": "ok"}
+
+
+@app.get("/api/sql-logs", tags=["logs"])
+def sql_logs(
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> list[dict]:
+    """返回最近执行的 SQL 日志（新→旧），供前端日志面板展示。"""
+    return get_sql_logs(limit)
 
 
 # 挂载业务路由（统一 /api 前缀）

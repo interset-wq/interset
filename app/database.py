@@ -6,8 +6,12 @@
 """
 
 import os
+import threading
+from collections import deque
 from collections.abc import Generator
+from datetime import datetime, timezone
 
+from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
 
 
@@ -41,6 +45,40 @@ else:
         pool_pre_ping=True,
         pool_recycle=300,
     )
+
+
+# ---- SQL 执行日志（供前端面板展示）----
+# 线程安全：FastAPI 同步路由在线程池中执行，多个线程可能同时写日志
+_sql_log_lock = threading.Lock()
+_sql_logs: deque[dict] = deque(maxlen=100)
+
+
+def _on_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+    """SQLAlchemy 事件：记录每次实际执行的 SQL 语句（含参数），新记录在前。"""
+    sql = " ".join(str(statement).split())  # 压缩空白，便于展示
+    if not sql.strip():
+        return
+    try:
+        params = repr(tuple(parameters)) if isinstance(parameters, (list, tuple)) else repr(parameters)
+    except Exception:
+        params = ""
+    with _sql_log_lock:
+        _sql_logs.appendleft(
+            {
+                "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "sql": sql,
+                "params": params,
+            }
+        )
+
+
+event.listen(engine, "before_cursor_execute", _on_before_cursor_execute)
+
+
+def get_sql_logs(limit: int = 50) -> list[dict]:
+    """返回最近执行的 SQL 日志（新→旧），供 API/前端展示。"""
+    with _sql_log_lock:
+        return list(_sql_logs)[:limit]
 
 
 def create_db_and_tables() -> None:
