@@ -35,6 +35,17 @@ class HeroUpdate(SQLModel):
     team_id: Optional[int] = Field(default=None)
 
 
+class JoinedHeroRead(SQLModel):
+    """hero LEFT JOIN team 查询结果行（DB 层实际 JOIN 输出）。"""
+
+    id: int
+    name: str
+    secret_name: str
+    age: Optional[int] = None
+    team_id: Optional[int] = None
+    team_name: Optional[str] = None
+
+
 class TeamBase(SQLModel):
     """Team 公共字段。"""
 

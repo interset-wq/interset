@@ -4,8 +4,9 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastapi import FastAPI, Query
+from sqlalchemy import inspect
 
-from app.database import create_db_and_tables, get_sql_logs
+from app.database import create_db_and_tables, engine, get_sql_logs
 from app.routers import heroes, teams
 
 
@@ -36,6 +37,27 @@ def sql_logs(
 ) -> list[dict]:
     """返回最近执行的 SQL 日志（新→旧），供前端日志面板展示。"""
     return get_sql_logs(limit)
+
+
+@app.get("/api/tables", tags=["schema"])
+def tables() -> list[dict]:
+    """列出所有表的表结构（类似 psql \\d：表名、字段名、数据类型、可空、主键）。"""
+    inspector = inspect(engine)
+    rows: list[dict] = []
+    for table_name in inspector.get_table_names():
+        pk_constraint = inspector.get_pk_constraint(table_name)
+        pk_columns = set(pk_constraint.get("constrained_columns") or [])
+        for col in inspector.get_columns(table_name):
+            rows.append(
+                {
+                    "table": table_name,
+                    "column": col["name"],
+                    "type": str(col["type"]),
+                    "nullable": col["nullable"],
+                    "primary_key": col["name"] in pk_columns,
+                }
+            )
+    return rows
 
 
 # 挂载业务路由（统一 /api 前缀）

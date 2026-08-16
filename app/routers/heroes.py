@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import Hero
-from app.schemas import HeroCreate, HeroRead, HeroUpdate
+from app.models import Hero, Team
+from app.schemas import HeroCreate, HeroRead, HeroUpdate, JoinedHeroRead
 
 router = APIRouter(prefix="/heroes", tags=["heroes"])
 
@@ -26,6 +26,27 @@ def read_heroes(
         select(Hero).order_by(Hero.id).offset(offset).limit(limit)
     ).all()
     return heroes
+
+
+@router.get("/joined", response_model=list[JoinedHeroRead])
+def read_joined(session: SessionDep) -> list[dict]:
+    """hero LEFT JOIN team 的实际查询结果（DB 层执行，非前端拼接）。"""
+    rows = session.exec(
+        select(Hero, Team.name)
+        .join(Team, Hero.team_id == Team.id, isouter=True)
+        .order_by(Hero.id)
+    ).all()
+    return [
+        {
+            "id": hero.id,
+            "name": hero.name,
+            "secret_name": hero.secret_name,
+            "age": hero.age,
+            "team_id": hero.team_id,
+            "team_name": team_name,
+        }
+        for hero, team_name in rows
+    ]
 
 
 @router.get("/{hero_id}", response_model=HeroRead)
