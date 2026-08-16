@@ -9,7 +9,7 @@ import os
 import threading
 from collections import deque
 from collections.abc import Generator
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine
@@ -80,16 +80,22 @@ def _inline_params(sql: str, parameters) -> str:
     return sql
 
 
+# 只记录用户写操作（INSERT/UPDATE/DELETE）；页面加载等 SELECT 读语句不记日志
+_WRITE_VERBS = ("INSERT", "UPDATE", "DELETE")
+
+
 def _on_before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    """SQLAlchemy 事件：记录实际执行的 SQL，参数内联为完整语句（SQLModel 输出风格），新记录在前。"""
+    """SQLAlchemy 事件：记录用户写操作的 SQL（参数内联为完整语句），新记录在前。"""
     sql = " ".join(str(statement).split())  # 压缩空白，便于展示
-    sql = _inline_params(sql, parameters)
     if not sql.strip():
         return
+    if not sql.upper().startswith(_WRITE_VERBS):
+        return
+    sql = _inline_params(sql, parameters)
     with _sql_log_lock:
         _sql_logs.appendleft(
             {
-                "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "sql": sql,
             }
         )
