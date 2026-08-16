@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 
-// 页面数据：英雄、团队、健康状态、SQL 执行日志、关联表、表结构
+// 页面数据：英雄、团队、任务、中间表、健康状态、SQL 执行日志、关联表、表结构
 const heroes = ref([]);
 const teams = ref([]);
+const missions = ref([]);
+const missionLinks = ref([]);
 const health = ref(null);
 const sqlLogs = ref([]);
 const joined = ref([]);
@@ -28,6 +30,13 @@ const teamForm = ref({
   headquarters: "",
 });
 
+// 新增任务表单（hero_ids 多选，关联英雄写入中间表 mission_hero）
+const missionForm = ref({
+  name: "",
+  location: "",
+  hero_ids: [],
+});
+
 // 统一请求封装：前端与后端同源（同一 FastAPI 应用托管），直接调用 /api
 async function api(path, options = {}) {
   const res = await fetch(`/api${path}`, {
@@ -43,15 +52,19 @@ async function api(path, options = {}) {
 }
 
 async function loadAll() {
-  const [hs, ts, logs, jd, tbs] = await Promise.all([
+  const [hs, ts, mss, links, logs, jd, tbs] = await Promise.all([
     api("/heroes?limit=100"),
     api("/teams"),
+    api("/missions"),
+    api("/missions/links"),
     api("/sql-logs?limit=5"),
     api("/heroes/joined"),
     api("/tables"),
   ]);
   heroes.value = hs;
   teams.value = ts;
+  missions.value = mss;
+  missionLinks.value = links;
   sqlLogs.value = logs;
   joined.value = jd;
   tables.value = tbs;
@@ -96,6 +109,32 @@ async function createTeam() {
       }),
     });
     teamForm.value = { name: "", headquarters: "" };
+    await loadAll();
+  } catch (e) {
+    error.value = e.message;
+  } finally {
+    loading.value = false;
+  }
+}
+
+// 新增任务（hero_ids 关联英雄，写入 M2M 中间表 mission_hero）
+async function createMission() {
+  error.value = "";
+  if (!missionForm.value.name) {
+    error.value = "name is required";
+    return;
+  }
+  loading.value = true;
+  try {
+    await api("/missions", {
+      method: "POST",
+      body: JSON.stringify({
+        name: missionForm.value.name,
+        location: missionForm.value.location || null,
+        hero_ids: missionForm.value.hero_ids,
+      }),
+    });
+    missionForm.value = { name: "", location: "", hero_ids: [] };
     await loadAll();
   } catch (e) {
     error.value = e.message;
@@ -281,6 +320,15 @@ onMounted(async () => {
       <button :class="{ active: activeTab === 'teams' }" @click="activeTab = 'teams'">
         team（{{ teams.length }}）
       </button>
+      <button :class="{ active: activeTab === 'missions' }" @click="activeTab = 'missions'">
+        mission（{{ missions.length }}）
+      </button>
+      <button
+        :class="{ active: activeTab === 'mission_hero' }"
+        @click="activeTab = 'mission_hero'"
+      >
+        mission_hero（{{ missionLinks.length }}）
+      </button>
       <button :class="{ active: activeTab === 'joined' }" @click="activeTab = 'joined'">
         hero LEFT JOIN team（{{ joined.length }}）
       </button>
@@ -430,6 +478,86 @@ onMounted(async () => {
         </table>
       </div>
       <p v-if="!teams.length" class="muted">0 rows — no teams yet, create one!</p>
+    </section>
+
+    <!-- 任务 Tab：表单 + mission 表（M2M，hero_ids 关联英雄） -->
+    <section v-if="activeTab === 'missions'" class="card">
+      <h2>INSERT INTO mission</h2>
+      <form @submit.prevent="createMission">
+        <input v-model="missionForm.name" placeholder="Mission name (required)" />
+        <input v-model="missionForm.location" placeholder="Location" />
+        <select v-model="missionForm.hero_ids" multiple size="3">
+          <option v-for="h in heroes" :key="h.id" :value="h.id">
+            {{ h.name }}（#{{ h.id }}）
+          </option>
+        </select>
+        <button type="submit" :disabled="loading">
+          {{ loading ? "Submitting…" : "Create mission" }}
+        </button>
+      </form>
+
+      <h3 class="query-sql">SELECT * FROM mission</h3>
+
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr>
+              <th>id</th>
+              <th>name</th>
+              <th>location</th>
+              <th>heroes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="m in missions" :key="m.id">
+              <td>{{ m.id }}</td>
+              <td>{{ m.name }}</td>
+              <td>{{ m.location ?? "NULL" }}</td>
+              <td>
+                <template v-if="m.heroes.length">
+                  {{ m.heroes.map((h) => h.name).join(", ") }}
+                </template>
+                <template v-else>NULL</template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!missions.length" class="muted">0 rows — no missions yet, create one!</p>
+    </section>
+
+    <!-- 中间表 Tab：mission_hero 的 DB 实际行 -->
+    <section v-if="activeTab === 'mission_hero'" class="card">
+      <h2>mission_hero（Hero ↔ Mission M2M 中间表）</h2>
+      <p class="muted">DB 层面的中间表实际数据行（含关联名称便于阅读）。</p>
+
+      <h3 class="query-sql">SELECT * FROM mission_hero</h3>
+
+      <div class="table-wrap">
+        <table class="cli-table">
+          <thead>
+            <tr>
+              <th>mission_id</th>
+              <th>hero_id</th>
+              <th>role</th>
+              <th>mission_name</th>
+              <th>hero_name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(link, i) in missionLinks" :key="i">
+              <td>{{ link.mission_id }}</td>
+              <td>{{ link.hero_id }}</td>
+              <td>{{ link.role ?? "NULL" }}</td>
+              <td>{{ link.mission_name }}</td>
+              <td>{{ link.hero_name }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-if="!missionLinks.length" class="muted">
+        0 rows — no links yet, create a mission with heroes
+      </p>
     </section>
 
     <!-- 关联表 Tab：hero LEFT JOIN team -->
